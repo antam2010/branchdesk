@@ -98,6 +98,8 @@ Windows と WSL の Git ユーザー情報、認証、改行設定、SSH エー�
 
 **アプリ更新 → 新しいバージョンを取得 → 適用して再起動** を使用します。更新機能がない古い EXE を使っている場合だけ、終了して一度 `git pull` し、新しい EXE を起動してください。
 
+古い更新ヘルパーで、引数 3 個の `Replace` 呼び出し時にパス形式のエラーが出る場合は、アプリを終了して `git pull` し、作業フォルダー内の新しい `Branchdesk.exe` を一度起動してください。不具合のあるヘルパーは同じ更新操作で自身の修正版を適用できません。リポジトリのファイルには影響しません。
+
 このリポジトリの `main` にある `Branchdesk.exe` と実行中のファイルを比較し、コミットに固定した blob をバックグラウンドで取得します。Git blob ハッシュと Windows 実行ファイル形式を検査し、Windows 側の保存時に SHA-256 も確認します。適用時はタブと作成途中のコミットメッセージを保存して終了し、新しい EXE を起動します。復元情報は Windows/WSL のホスト変更でも共有します。
 
 保存先は `%LOCALAPPDATA%\Branchdesk\versions\<hash>\Branchdesk.exe` です。以後、認識済みの旧 EXE から起動しても保存済みの新しい版に接続します。`git pull` で取得した未知の新しい EXE はそちらを優先します。ダウンロードやヘルパーの検証に失敗した場合、現在のアプリを維持します。
@@ -154,7 +156,10 @@ BRANCHDESK_EXE=./Branchdesk.exe python3 tests/browser_smoke.py
 
 準備済みの Windows 11 デスクトップでは次を実行できます。
 
+更新ヘルパーの回帰テストは、実際の PowerShell と一時ファイルで初回・再更新とロールバックを確認します。プロセス起動とダイアログは差し替えるため、インストール済みアプリを起動・終了・更新しません。Python テストは PowerShell があれば実行します。実行ファイルは `BRANCHDESK_POWERSHELL` でも指定できます。
+
 ```powershell
+.\windows\test-update.ps1
 .\windows\test-launch.ps1
 .\windows\test-window-state.ps1
 ```

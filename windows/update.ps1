@@ -6,12 +6,15 @@ $request = $null
 $parent = $null
 $previous = $null
 $pointer = $null
+$tempPointer = $null
 $changed = $false
+$validated = $false
 try {
     $request = Get-Content -LiteralPath $RequestFile -Raw -Encoding UTF8 | ConvertFrom-Json
     if ($request.sha256 -notmatch '^[0-9a-f]{64}$') { throw (T '업데이트 파일 정보가 올바르지 않습니다.') }
     $parent = Get-Process -Id ([int]$request.parentPid)
     if (![string]::Equals($parent.Path, $request.launcher, [StringComparison]::OrdinalIgnoreCase)) { throw (T '실행 중인 앱을 확인하지 못했습니다.') }
+    $validated = $true
     if ((Get-FileHash -LiteralPath $request.source -Algorithm SHA256).Hash.ToLowerInvariant() -ne $request.sha256) { throw (T '업데이트 파일 검증에 실패했습니다.') }
     $root = Join-Path $env:LOCALAPPDATA 'Branchdesk'
     $directory = Join-Path (Join-Path $root 'versions') $request.sha256
@@ -40,7 +43,9 @@ try {
     $newPointer = @{sha256=$request.sha256; launchers=$launchers} | ConvertTo-Json -Compress
     $tempPointer = Join-Path $root ([Guid]::NewGuid().ToString() + '.tmp')
     [IO.File]::WriteAllText($tempPointer, $newPointer)
-    if (Test-Path -LiteralPath $pointer) { [IO.File]::Replace($tempPointer, $pointer, $null) }
+    # PowerShell converts $null to an empty string for .NET string arguments.
+    # File.Replace requires a real null to omit the backup path (including in Windows PowerShell 5.1).
+    if (Test-Path -LiteralPath $pointer) { [IO.File]::Replace($tempPointer, $pointer, [NullString]::Value) }
     else { [IO.File]::Move($tempPointer, $pointer) }
     $changed = $true
     Start-Process -FilePath $candidate
@@ -48,11 +53,16 @@ try {
     $message = $_.Exception.Message
     if ($request) {
         try { [IO.File]::WriteAllText($request.signal + '.error', $message, (New-Object Text.UTF8Encoding($false))) } catch {}
+        $canRestart = $validated -and !$changed
         if ($changed) {
             try {
                 if ($previous) { [IO.File]::WriteAllText($pointer, $previous) } else { Remove-Item -LiteralPath $pointer -Force }
-                Start-Process -FilePath $request.launcher
+                $canRestart = $true
             } catch {}
+        }
+        # Replacement can fail after the old app exits but before the pointer changes.
+        if ($canRestart -and $parent.HasExited) {
+            try { Start-Process -FilePath $request.launcher } catch {}
         }
     }
     if ($parent -and $parent.HasExited) {
@@ -61,6 +71,9 @@ try {
     }
 } finally {
     if ($parent) { $parent.Dispose() }
+    if ($tempPointer -and (Test-Path -LiteralPath $tempPointer)) {
+        try { Remove-Item -LiteralPath $tempPointer -Force } catch {}
+    }
     # This directory was created exclusively by this update request.
     $stage = Split-Path -Parent $RequestFile
     if ((Split-Path -Leaf $stage) -like 'branchdesk-update-*') {

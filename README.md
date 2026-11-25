@@ -98,6 +98,8 @@ For Git Flow, configure production/development branches in **Git Flow**, then st
 
 Use **App update → Download new version → Apply and restart**. If your old EXE predates the updater, close it, `git pull` once, and run the new EXE first.
 
+If an older update helper reports a three-argument `Replace` error about an invalid path, close the app, run `git pull`, and launch the new `Branchdesk.exe` from the checkout once. The affected helper cannot install its own fix through the same update action. Repository files are unaffected.
+
 The updater compares the current EXE with `Branchdesk.exe` on this repository's `main`, downloads a commit-pinned blob in the background, verifies its Git blob hash and Windows executable format, then checks SHA-256 when caching it in Windows. Applying saves tabs and commit-message drafts, closes the current app, and launches the new EXE. Resume data is shared across Windows/WSL host changes.
 
 New versions live under `%LOCALAPPDATA%\Branchdesk\versions\<hash>\Branchdesk.exe`. A pointer redirects a recognized older launcher to the cached version on later launches. A newly pulled, unrecognized EXE takes priority. Download/helper verification failures leave the current app available.
@@ -154,7 +156,10 @@ Tests use temporary repositories and local bare remotes. They cover Git workflow
 
 In a prepared Windows 11 desktop session:
 
+The update-helper regression test uses real PowerShell and temporary files to check first/repeated updates and rollback. It intercepts process launches and dialogs, so it does not start, close, or update your installed app. Python tests run it when PowerShell is available (or set `BRANCHDESK_POWERSHELL` to its executable).
+
 ```powershell
+.\windows\test-update.ps1
 .\windows\test-launch.ps1
 .\windows\test-window-state.ps1
 ```
