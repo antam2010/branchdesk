@@ -60,7 +60,6 @@ let busy = false,
   toastTimer;
 const drafts = new Map(),
   collapsed = new Set();
-$(".logo").innerHTML = icon("branch");
 let tabWarningShown = "";
 async function api(name, data = {}) {
   const res = await fetch("/api/" + name, {

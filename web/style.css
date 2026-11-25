@@ -68,18 +68,10 @@ header {
 }
 
 .logo {
-  display: grid;
-  place-items: center;
-  background: #87d7b9;
-  color: #163e34;
-  border-radius: 7px;
-  width: 27px;
-  height: 27px;
-}
-
-.logo .ic {
-  width: 19px;
-  height: 19px;
+  display: block;
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
 }
 
 .brandline {

@@ -19,7 +19,8 @@ import workspace_ops
 from tab_store import TabStore
 
 WEB = Path(__file__).resolve().parent / "web"
-ASSETS = {"/panes.js": "panes.js", "/": "index.html", "/app.js": "app.js", "/commands.js": "commands.js", "/style.css": "style.css"}
+ASSETS = {"/panes.js": "panes.js", "/": "index.html", "/app.js": "app.js", "/commands.js": "commands.js", "/style.css": "style.css",
+          "/icon.png": "icon.png", "/favicon.ico": "favicon.ico"}
 
 
 class Desk(ThreadingHTTPServer):
@@ -94,7 +95,7 @@ class Handler(BaseHTTPRequestHandler):
         if mime == "application/json":
             body = json.dumps(body, ensure_ascii=True).encode()
         self.send_response(status)
-        self.send_header("Content-Type", mime + "; charset=utf-8")
+        self.send_header("Content-Type", mime + ("; charset=utf-8" if mime.startswith("text/") or mime in ("application/json", "application/javascript") else ""))
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("Referrer-Policy", "no-referrer")

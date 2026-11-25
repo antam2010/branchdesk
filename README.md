@@ -4,7 +4,21 @@ WSL에서 실행하는 한국어 Git GUI. Windows 브라우저는 화면을 표�
 
 ## Windows에서 더블클릭으로 실행
 
-Windows 11 x64에서 압축을 푼 뒤 `Branchdesk.exe`를 더블클릭한다. 기본 WSL 배포판에 Python 3.9 이상과 Git 2.28 이상이 있고, Windows에는 Microsoft Edge가 설치되어 있어야 한다. 화면에서 **저장소 열기**를 누르고 `~/projects/my-app` 같은 WSL 경로를 입력한다. `/h`를 입력하면 `home/`처럼 바로 아래 폴더의 이름만 표시된다. 클릭하거나 방향키와 Enter로 선택하면 하위 폴더를 계속 탐색할 수 있다. EXE에는 서버와 화면 파일이 들어 있어 실행 시 다른 소스 파일을 함께 둘 필요가 없다.
+Windows 11 x64에서 압축을 푼 뒤 **`Branchdesk.exe`를 더블클릭**한다. 필요한 프로그램이 준비된 PC에서는 바로 앱이 열린다. 따로 Windows용 Python이나 Git을 설치할 필요는 없다.
+
+처음 실행하면 WSL·기본 Linux 배포판·Python·Git·Edge를 확인한다. 빠진 항목이 있으면 **시작 준비** 창에서 목록을 보여주고 설치 여부를 묻는다. **예**를 누르면 설치 창에서 준비를 진행한다. 설치를 취소하면 프로그램 설치 없이 종료한다. 자동 설치에는 인터넷 연결이 필요하다.
+
+| PC 상태 | 처음 실행할 때 할 일 |
+| --- | --- |
+| WSL과 필요한 프로그램이 준비됨 | 바로 사용 |
+| Ubuntu/Debian 계열 WSL에 Python 또는 Git이 없거나 오래됨 | **예**를 누르면 필요한 패키지만 설치·업데이트한 뒤 앱 실행 |
+| WSL 또는 Linux 배포판이 없음 | **예** → 관리자 승인 → WSL·Ubuntu 설치. 안내에 따라 재부팅하고 Ubuntu에서 Linux 계정을 만든 뒤 EXE 다시 실행 |
+| Edge가 없음 | 설치에 동의하면 Windows 패키지 관리자로 설치. 패키지 관리자가 없으면 공식 다운로드 페이지 안내 |
+| 다른 Linux 배포판 또는 기존 WSL 시작 오류 | 해당 배포판에 맞는 준비 방법이나 오류 확인 안내 |
+
+WSL 최초 설치 시 관리자 권한 승인·재부팅·Linux 계정 생성은 사용자가 진행한다. 자동 재부팅은 하지 않는다. 기존 기본 WSL 배포판과 Git 설정을 그대로 사용하며, 별도 배포판으로 바꾸지 않는다. 필요한 버전은 WSL 안의 Python 3.9 이상·Git 2.28 이상이다. 오래된 배포판의 패키지 저장소에서 해당 버전을 제공하지 않으면 배포판을 업데이트해야 한다.
+
+화면에서 **저장소 열기**를 누르고 `~/projects/my-app` 같은 WSL 경로를 입력한다. `/h`를 입력하면 `home/`처럼 바로 아래 폴더의 이름만 표시된다. 클릭하거나 방향키와 Enter로 선택하면 하위 폴더를 계속 탐색할 수 있다. EXE에는 시작 준비 도우미·서버·화면·아이콘이 들어 있어 실행 시 다른 소스 파일을 함께 둘 필요가 없다.
 
 EXE는 Windows의 `127.0.0.1`에서만 연결을 받는다. 요청을 `wsl.exe`의 표준 입출력 파이프로 전달하고 WSL에서 보낸 응답을 확인한 뒤 Edge 창을 연다. WSL의 localhost 포트 전달은 필요하지 않다. 전용 창을 닫으면 서버는 이미 접수된 Git 작업을 마친 뒤 종료한다. 창마다 별도 임시 Edge 프로필을 사용한다. 브라우저의 기존 로그인 상태를 사용하지 않는다.
 
@@ -18,7 +32,7 @@ Windows에서 Visual Studio의 **x64 Native Tools Command Prompt**를 열고 프
 py -3 windows/build.py
 ```
 
-빌드 결과는 `dist/Branchdesk.exe`다. Linux에서는 MinGW-w64의 `x86_64-w64-mingw32-gcc`가 설치된 환경에서 `python3 windows/build.py`로 빌드한다.
+빌드 결과는 `dist/Branchdesk.exe`다. Linux에서는 MinGW-w64의 `x86_64-w64-mingw32-gcc`와 `x86_64-w64-mingw32-windres`가 설치된 환경에서 `python3 windows/build.py`로 빌드한다.
 
 ## WSL 터미널에서 실행
 
@@ -92,6 +106,13 @@ BRANCHDESK_EXE=./Branchdesk.exe python3 tests/browser_smoke.py
 ```
 
 두 번째 명령은 EXE의 내장 파일을 배포 소스와 대조하고 내장 Python 실행 명령, 세션 시작·종료, 실제 Chromium 조작을 검사한다. Windows 프로세스 실행과 WSL 연결은 Windows 11에서 별도로 확인한다.
+
+시작 준비의 Linux 프로그램 감지는 테스트에서 프로그램 누락, Python 3.8/3.9 경계, Git 2.27/2.28 경계, 잘못된 버전 출력을 검사한다. Windows에서 실제 설치·관리자 승인·재부팅까지 이어지는 과정은 별도 확인이 필요하다. 다음 순서로 확인한다.
+
+1. 필요한 프로그램이 준비된 PC에서 EXE를 열어 시작 준비 창 없이 앱이 열리는지 확인한다.
+2. 별도 테스트용 PC/가상머신에서 WSL이 없는 상태로 실행해 누락 목록과 설치 동의를 확인한다. **아니요**를 누르면 설치 없이 종료되어야 한다.
+3. **예**를 눌러 WSL·Ubuntu 설치 안내를 따른다. 재부팅과 Linux 계정 생성 후 EXE를 다시 열어 패키지 설치를 이어갈 수 있어야 한다.
+4. Python 또는 Git이 없는 테스트용 Ubuntu/Debian에서 누락된 패키지만 준비하고 앱이 열리는지 확인한다. 실제 개발용 PC의 기존 프로그램을 지워 테스트하지 않는다.
 
 Windows에서 EXE 시작·종료를 자동 점검할 때는 압축을 푼 폴더에서 PowerShell로 아래 명령을 실행한다. 테스트가 연 Edge 창과 WSL API 응답을 확인하고 창을 닫은 뒤 서버 종료를 점검한다.
 

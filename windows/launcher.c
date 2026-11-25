@@ -5,6 +5,9 @@
 #include <windows.h>
 #include <shellapi.h>
 #include "payload.h"
+#include "setup.h"
+
+static HICON app_icon_big=NULL, app_icon_small=NULL;
 
 /* Only the data pipe crosses into WSL. Git paths never pass through Win32. */
 static const WCHAR bootstrap[] =
@@ -111,6 +114,38 @@ static BOOL temp_profile(WCHAR *path) {
     wsprintfW(suffix,L"Branchdesk-%lu-%lu",GetCurrentProcessId(),GetTickCount());
     return append(path,MAX_PATH-1,base) && append(path,MAX_PATH-1,suffix) && CreateDirectoryW(path,NULL);
 }
+/* Only the official WSL installer requests UAC; the helper stays unelevated. */
+static BOOL ensure_prerequisites(const WCHAR *directory) {
+    WCHAR script[MAX_PATH]={0}, powershell[MAX_PATH], cmd[2048]={0};
+    HANDLE file=NULL;
+    PROCESS_INFORMATION process={0};
+    STARTUPINFOW si={0};
+    DWORD code=3;
+    BOOL launched=FALSE;
+    si.cb=sizeof(si);
+    if(!append(script,MAX_PATH,directory) || !append(script,MAX_PATH,L"\\setup.ps1")) goto done;
+    file=CreateFileW(script,GENERIC_WRITE,0,NULL,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,NULL);
+    if(file==INVALID_HANDLE_VALUE) { file=NULL; goto done; }
+    if(!write_all(file,setup_script,(DWORD)sizeof(setup_script))) goto done;
+    close_handle(&file);
+    DWORD n=GetSystemDirectoryW(powershell,MAX_PATH);
+    if(!n || n>=MAX_PATH || !append(powershell,MAX_PATH,L"\\WindowsPowerShell\\v1.0\\powershell.exe")) goto done;
+    if(!append(cmd,2048,L"powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"") ||
+       !append(cmd,2048,script) || !append(cmd,2048,L"\"")) goto done;
+    if(!CreateProcessW(powershell,cmd,NULL,NULL,FALSE,CREATE_NO_WINDOW,NULL,NULL,&si,&process)) goto done;
+    launched=TRUE;
+    close_handle(&process.hThread);
+    if(WaitForSingleObject(process.hProcess,INFINITE)==WAIT_OBJECT_0)
+        GetExitCodeProcess(process.hProcess,&code);
+done:
+    close_handle(&file);
+    close_handle(&process.hProcess);
+    if(script[0]) DeleteFileW(script);
+    if(!launched) alert(L"시작 준비 화면을 열지 못했습니다. Windows PowerShell 실행 정책이나 보안 프로그램 차단 여부를 확인하세요.");
+    else if(code!=0 && code!=2 && code!=3 && code!=10)
+        alert(L"시작 준비 도우미가 실행되지 않았습니다. Windows PowerShell 실행 정책이나 보안 프로그램 차단 여부를 확인하세요.");
+    return launched && code==0;
+}
 static void remove_profile(WCHAR *path) {
     SHFILEOPSTRUCTW op={0};
     path[lstrlenW(path)+1]=0;
@@ -146,18 +181,25 @@ static DWORD wait_window(HANDLE backend, PROCESS_INFORMATION *edge) {
         EnumWindows(find_window,(LPARAM)&search);
         if(!search.window && GetTickCount64()>=deadline) return 2;
     }
+    if(app_icon_big) SendMessageW(search.window,WM_SETICON,ICON_BIG,(LPARAM)app_icon_big);
+    if(app_icon_small) SendMessageW(search.window,WM_SETICON,ICON_SMALL,(LPARAM)app_icon_small);
     while(IsWindow(search.window)) if(WaitForSingleObject(backend,300)==WAIT_OBJECT_0) return 1;
     return 0;
 }
 int WINAPI wWinMain(HINSTANCE instance,HINSTANCE prev,LPWSTR args,int show) {
-    (void)instance; (void)prev; (void)args; (void)show;
+    (void)prev; (void)args; (void)show;
     WCHAR edge[MAX_PATH], wsl[MAX_PATH], cmd[2048]={0}, url[128], profile[MAX_PATH+1]={0};
     HANDLE child_in=NULL, input=NULL, output=NULL, child_out=NULL, writer=NULL;
     PROCESS_INFORMATION backend={0},app={0};
     SECURITY_ATTRIBUTES sa={sizeof(sa),NULL,TRUE};
     BOOL made_profile=FALSE;
     int result=1;
-    if (!find_edge(edge)) { alert(L"Windows에서 Microsoft Edge를 찾을 수 없습니다."); return 1; }
+    app_icon_big=(HICON)LoadImageW(instance,MAKEINTRESOURCEW(101),IMAGE_ICON,32,32,0);
+    app_icon_small=(HICON)LoadImageW(instance,MAKEINTRESOURCEW(101),IMAGE_ICON,16,16,0);
+    made_profile=temp_profile(profile);
+    if(!made_profile) { alert(L"시작 준비에 사용할 임시 폴더를 만들지 못했습니다."); goto cleanup; }
+    if(!ensure_prerequisites(profile)) goto cleanup;
+    if (!find_edge(edge)) { alert(L"Microsoft Edge 설치를 확인하지 못했습니다. Branchdesk를 다시 실행하세요."); goto cleanup; }
     if(!listen_local() || !SetHandleInformation((HANDLE)listener,HANDLE_FLAG_INHERIT,0)) {
         alert(L"BD-01: Windows에서 127.0.0.1 수신 포트를 열 수 없습니다.");
         goto cleanup;
@@ -180,8 +222,6 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE prev,LPWSTR args,int show) {
         alert(L"BD-03: Windows에서 보낸 연결 확인 요청에 WSL Git 서비스가 응답하지 않았습니다.");
         goto cleanup;
     }
-    made_profile=temp_profile(profile);
-    if (!made_profile) goto startup_error;
     cmd[0]=0;
     if (!append(cmd,2048,L"msedge.exe --no-first-run --no-default-browser-check --disable-background-mode --user-data-dir=\"") ||
         !append(cmd,2048,profile) || !append(cmd,2048,L"\" --app=") || !append(cmd,2048,url) ||
@@ -193,7 +233,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE prev,LPWSTR args,int show) {
     } else { result=0; }
     goto cleanup;
 startup_error:
-    alert(L"BD-02: Branchdesk를 시작하지 못했습니다.\n\nPowerShell에서 다음 두 명령으로 기본 WSL 배포판을 확인해 주세요.\n\nwsl --exec python3 --version  (3.9 이상)\nwsl --exec git --version  (2.28 이상)");
+    alert(L"BD-02: 실행 환경은 준비됐지만 WSL Git 서비스를 시작하지 못했습니다.\n\n기본 WSL 배포판을 열어 정상 동작하는지 확인한 뒤 Branchdesk를 다시 실행하세요.");
 cleanup:
     if(listener!=INVALID_SOCKET) closesocket(listener);
     close_handle(&child_in); close_handle(&child_out);
@@ -208,5 +248,7 @@ cleanup:
     if (app.hProcess && WaitForSingleObject(app.hProcess,1500)!=WAIT_OBJECT_0) made_profile=FALSE;
     close_handle(&app.hProcess);
     if(made_profile) remove_profile(profile);
+    if(app_icon_big) DestroyIcon(app_icon_big);
+    if(app_icon_small) DestroyIcon(app_icon_small);
     return result;
 }

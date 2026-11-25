@@ -57,6 +57,10 @@ class DesktopTests(unittest.TestCase):
                 sizes = list(pool.map(lambda name: len(request(name)[1]), ["/", "/app.js", "/commands.js", "/style.css"] * 2))
             self.assertEqual(sizes[:4], sizes[4:])
             self.assertTrue(all(n > 1000 for n in sizes))
+            for url, name in [("/icon.png", "icon.png"), ("/favicon.ico", "favicon.ico")]:
+                status, body = request(url)
+                self.assertEqual(status, 200)
+                self.assertEqual(body, (ROOT / "web" / name).read_bytes())
 
     def test_tabs_survive_desktop_restarts(self):
         exe = ROOT / "Branchdesk.exe"
