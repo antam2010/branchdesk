@@ -1,5 +1,6 @@
 """Run the desktop payload with a local test HTTP listener in place of WinSock."""
 import io
+import os
 import socketserver
 import struct
 import subprocess
@@ -58,7 +59,7 @@ def desktop(executable, workdir):
     with socketserver.ThreadingTCPServer(("127.0.0.1", 0), TestBridge) as server:
         server.daemon_threads = True
         port = server.server_address[1]
-        with subprocess.Popen([sys.executable, "-I", "-u", "-c", command], cwd=workdir,
+        with subprocess.Popen([sys.executable, "-I", "-u", "-c", command], cwd=workdir, env=dict(os.environ, XDG_STATE_HOME=str(Path(workdir) / ".test-state")),
                               stdin=subprocess.PIPE, stdout=subprocess.PIPE) as child:
             server.child = child
             server.pipe_lock = threading.Lock()

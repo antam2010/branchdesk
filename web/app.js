@@ -60,6 +60,7 @@ let busy = false,
 const drafts = new Map(),
   collapsed = new Set();
 $(".logo").innerHTML = icon("branch");
+let tabWarningShown = "";
 async function api(name, data = {}) {
   const res = await fetch("/api/" + name, {
     method: "POST",
@@ -74,6 +75,10 @@ async function api(name, data = {}) {
   });
   const payload = await res.json();
   if (!res.ok) throw Error(payload.error || "요청을 처리하지 못했습니다.");
+  if (payload.warning && payload.warning !== tabWarningShown) {
+    tabWarningShown = payload.warning;
+    notice(payload.warning, true);
+  }
   return payload.value;
 }
 function notice(msg, error = false) {
@@ -459,7 +464,11 @@ function clickAction(e) {
     limit = Math.min(limit + 250, 5000);
     return exclusive(() => refresh());
   }
-  if (d.tab !== undefined) return exclusive(() => refresh(repos[Number(d.tab)]));
+  if (d.tab !== undefined) return exclusive(async () => {
+    const next = repos[Number(d.tab)];
+    await api("select-tab", {repo: next});
+    await refresh(next);
+  });
   if (d.tool === "refresh") return exclusive(() => refresh());
   if (d.tool === "commit") {
     switchMode("work");
@@ -555,6 +564,7 @@ $("#form").onsubmit = e => {
   exclusive(() => actionPending(value));
 };
 exclusive(async () => {
-  repos = await api("repos");
-  if (repos.length) await refresh(repos[0]);else render();
+  const workspace = await api("workspace");
+  repos = workspace.repos;
+  if (repos.length) await refresh(workspace.active || repos[0]);else render();
 });

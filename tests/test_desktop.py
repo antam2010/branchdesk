@@ -57,3 +57,41 @@ class DesktopTests(unittest.TestCase):
                 sizes = list(pool.map(lambda name: len(request(name)[1]), ["/", "/app.js", "/commands.js", "/style.css"] * 2))
             self.assertEqual(sizes[:4], sizes[4:])
             self.assertTrue(all(n > 1000 for n in sizes))
+
+    def test_tabs_survive_desktop_restarts(self):
+        exe = ROOT / "Branchdesk.exe"
+        def api(url, endpoint, **data):
+            address = urlsplit(url)
+            conn = http.client.HTTPConnection(address.hostname, address.port, timeout=10)
+            try:
+                conn.request("POST", "/api/" + endpoint, json.dumps(data), {"X-Desk-Key": address.fragment})
+                response = conn.getresponse()
+                body = json.loads(response.read())
+                self.assertEqual(response.status, 200, body)
+                self.assertNotIn("warning", body)
+                return body["value"]
+            finally:
+                conn.close()
+
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            a, b, c = (str(parent / name) for name in ["프로젝트 A", "B", "C"])
+            with desktop(exe, parent) as first:
+                for path in [a, b, c]:
+                    api(first, "new", mode="init", path=path)
+                api(first, "select-tab", repo=b)
+            with desktop(exe, parent) as second:
+                self.assertNotEqual(urlsplit(first).fragment, urlsplit(second).fragment)
+                self.assertEqual(api(second, "workspace"), {"repos": [a, b, c], "active": b})
+                with desktop(exe, parent) as other:
+                    api(other, "close", repo=a)
+                    api(second, "close", repo=b)
+            with desktop(exe, parent) as third:
+                self.assertEqual(api(third, "workspace"), {"repos": [c], "active": c})
+                api(third, "open", path=a)
+            Path(a).rename(parent / "moved")
+            with desktop(exe, parent) as fourth:
+                self.assertEqual(api(fourth, "workspace"), {"repos": [c], "active": c})
+                api(fourth, "close", repo=c)
+            with desktop(exe, parent) as empty:
+                self.assertEqual(api(empty, "workspace"), {"repos": [], "active": None})

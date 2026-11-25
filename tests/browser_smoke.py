@@ -34,7 +34,7 @@ def run(base):
         url=session.__enter__()
     else:
         server=subprocess.Popen([sys.executable,str(ROOT/"branchdesk.py"),"--no-browser"],cwd=base,
-                                stdout=subprocess.PIPE)
+                                env=dict(os.environ, XDG_STATE_HOME=str(base / ".test-state")), stdout=subprocess.PIPE)
     try:
         if not packed:
             server.stdout.readline()

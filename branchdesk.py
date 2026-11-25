@@ -16,6 +16,7 @@ from pathlib import Path
 import gitdesk
 import partial
 import workspace_ops
+from tab_store import TabStore
 
 WEB = Path(__file__).resolve().parent / "web"
 ASSETS = {"/": "index.html", "/app.js": "app.js", "/commands.js": "commands.js", "/style.css": "style.css"}
@@ -31,11 +32,53 @@ class Desk(ThreadingHTTPServer):
         self.token = secrets.token_urlsafe(32)
         self.repos = {}
         self.registry_lock = threading.Lock()
+        self.tabs = TabStore()
+        self.tab_warning = None
+        self.active = None
+        try:
+            paths, active = self.tabs.read()
+        except OSError:
+            self.tab_warning = "이전에 열었던 저장소 목록을 읽지 못했습니다."
+            paths, active = [], None
+        for path in paths:
+            try:
+                root = gitdesk.repository(path)
+            except (OSError, ValueError, RuntimeError):
+                continue
+            if str(root) == path:
+                self.repos[path] = (root, threading.Lock())
+        self.active = active if active in self.repos else next(iter(self.repos), None)
+
+    def remember(self, path, *, closing=False):
+        try:
+            self.tabs.update(path, closing=closing, fallback=self.active)
+        except OSError:
+            self.tab_warning = "열린 탭을 저장하지 못했습니다. WSL 사용자 상태 폴더의 쓰기 권한을 확인하세요."
+
+    def select_tab(self, path):
+        with self.registry_lock:
+            if path not in self.repos:
+                raise ValueError("열려 있는 저장소를 선택하세요.")
+            self.active = path
+            self.remember(path)
+
+    def close_tab(self, path):
+        with self.registry_lock:
+            if path in self.repos:
+                index = list(self.repos).index(path)
+                del self.repos[path]
+                remaining = list(self.repos)
+                if self.active == path:
+                    self.active = remaining[min(index, len(remaining)-1)] if remaining else None
+                self.remember(path, closing=True)
+            return list(self.repos)
 
     def register(self, path):
         root = gitdesk.repository(path)
         with self.registry_lock:
             self.repos.setdefault(str(root), (root, threading.Lock()))
+            self.active = str(root)
+            self.remember(self.active)
         return str(root)
 
 
@@ -87,9 +130,12 @@ class Handler(BaseHTTPRequestHandler):
             elif self.path == "/api/new":
                 value = self.server.register(workspace_ops.new_repository(d))
             elif self.path == "/api/close":
+                value = self.server.close_tab(d["repo"])
+            elif self.path == "/api/select-tab":
+                value = self.server.select_tab(d["repo"])
+            elif self.path == "/api/workspace":
                 with self.server.registry_lock:
-                    self.server.repos.pop(d["repo"], None)
-                    value = list(self.server.repos)
+                    value = {"repos": list(self.server.repos), "active": self.server.active}
             elif self.path == "/api/repos":
                 with self.server.registry_lock:
                     value = list(self.server.repos)
@@ -112,7 +158,10 @@ class Handler(BaseHTTPRequestHandler):
                         value = gitdesk.act(root, d)
                     else:
                         return self.reply(404, {})
-            self.reply(200, {"value": value})
+            response = {"value": value}
+            if self.server.tab_warning:
+                response["warning"] = self.server.tab_warning
+            self.reply(200, response)
         except (ValueError, KeyError, TypeError, OSError, subprocess.SubprocessError) as e:
             self.reply(400, {"error": str(e)})
 
@@ -138,7 +187,7 @@ def main():
         server = Desk(args.port)
         for path in args.repositories:
             server.register(path)
-        if not args.repositories:
+        if not args.repositories and not server.repos and not server.tabs.file.is_file():
             try:
                 server.register(os.getcwd())
             except gitdesk.GitError:
