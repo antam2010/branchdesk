@@ -83,6 +83,7 @@ class DesktopTests(unittest.TestCase):
             with desktop(exe, parent) as second:
                 self.assertNotEqual(urlsplit(first).fragment, urlsplit(second).fragment)
                 self.assertEqual(api(second, "workspace"), {"repos": [a, b, c], "active": b})
+                self.assertEqual(api(second, "recent"), [b, c, a])
                 with desktop(exe, parent) as other:
                     api(other, "close", repo=a)
                     api(second, "close", repo=b)
@@ -95,3 +96,17 @@ class DesktopTests(unittest.TestCase):
                 api(fourth, "close", repo=c)
             with desktop(exe, parent) as empty:
                 self.assertEqual(api(empty, "workspace"), {"repos": [], "active": None})
+                self.assertEqual(api(empty, "recent"), [a, b, c])
+                api(empty, "open", path=b, exact=True)
+                api(empty, "open", path=b, exact=True)
+                self.assertEqual(api(empty, "workspace"), {"repos": [b], "active": b})
+                self.assertEqual(api(empty, "recent"), [b, a, c])
+
+            state_file = parent / ".test-state/branchdesk/tabs.json"
+            state_file.write_text(json.dumps({"repos": [b, c], "active": c}))
+            with desktop(exe, parent) as migrated:
+                self.assertEqual(api(migrated, "recent"), [c, b])
+                api(migrated, "close", repo=b)
+            with desktop(exe, parent) as reopened:
+                self.assertEqual(api(reopened, "recent"), [c, b])
+                self.assertEqual(api(reopened, "workspace")["repos"], [c])

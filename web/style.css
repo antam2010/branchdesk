@@ -844,3 +844,11 @@ dialog:has(.line-list), dialog:has(#resolution-text) { width:min(730px,92vw); }
   color: var(--teal);
   background: var(--wash);
 }
+
+.recent-repos { text-align:left; min-width:0; }
+.blank .recent-repos { margin:18px auto 0; width:min(420px,65vw); }
+.recent-repos h3 { font-size:13px; margin:0 0 6px; color:var(--ink); }
+.recent-repos > div { max-height:min(220px,30vh); overflow:auto; border:1px solid var(--border); border-radius:5px; }
+.recent-repos button { display:block; text-align:left; width:100%; padding:7px 10px; border:0; border-radius:0; }
+.recent-repos button + button { border-top:1px solid var(--border); }
+.recent-repos small { display:block; color:var(--muted); overflow-wrap:anywhere; }

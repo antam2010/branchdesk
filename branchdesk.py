@@ -36,10 +36,10 @@ class Desk(ThreadingHTTPServer):
         self.tab_warning = None
         self.active = None
         try:
-            paths, active = self.tabs.read()
+            paths, active, self.recent = self.tabs.read()
         except OSError:
             self.tab_warning = "이전에 열었던 저장소 목록을 읽지 못했습니다."
-            paths, active = [], None
+            paths, active, self.recent = [], None, []
         for path in paths:
             try:
                 root = gitdesk.repository(path)
@@ -51,8 +51,10 @@ class Desk(ThreadingHTTPServer):
 
     def remember(self, path, *, closing=False):
         try:
-            self.tabs.update(path, closing=closing, fallback=self.active)
+            self.recent = self.tabs.update(path, closing=closing, fallback=self.active)
         except OSError:
+            if not closing:
+                self.recent = [path] + [p for p in self.recent if p != path]
             self.tab_warning = "열린 탭을 저장하지 못했습니다. WSL 사용자 상태 폴더의 쓰기 권한을 확인하세요."
 
     def select_tab(self, path):
@@ -73,8 +75,10 @@ class Desk(ThreadingHTTPServer):
                 self.remember(path, closing=True)
             return list(self.repos)
 
-    def register(self, path):
+    def register(self, path, exact=False):
         root = gitdesk.repository(path)
+        if exact and str(root) != path:
+            raise ValueError("해당 경로에서 이전 저장소를 찾을 수 없습니다.")
         with self.registry_lock:
             self.repos.setdefault(str(root), (root, threading.Lock()))
             self.active = str(root)
@@ -126,7 +130,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/directories":
                 value = workspace_ops.directory_suggestions(d["path"])
             elif self.path == "/api/open":
-                value = self.server.register(d["path"])
+                value = self.server.register(d["path"], exact=d.get("exact") is True)
             elif self.path == "/api/new":
                 value = self.server.register(workspace_ops.new_repository(d))
             elif self.path == "/api/close":
@@ -136,6 +140,14 @@ class Handler(BaseHTTPRequestHandler):
             elif self.path == "/api/workspace":
                 with self.server.registry_lock:
                     value = {"repos": list(self.server.repos), "active": self.server.active}
+            elif self.path == "/api/recent":
+                with self.server.registry_lock:
+                    if not self.server.tab_warning:
+                        try:
+                            self.server.recent = self.server.tabs.read()[2]
+                        except OSError:
+                            self.server.tab_warning = "최근 저장소 목록을 읽지 못했습니다."
+                    value = list(self.server.recent)
             elif self.path == "/api/repos":
                 with self.server.registry_lock:
                     value = list(self.server.repos)

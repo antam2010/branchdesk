@@ -112,6 +112,13 @@ def run(base):
                 click("#add");operation("clone");fill("#repo-url",bare);fill("#repo-path",base/"clone");submit()
                 expect(loc(".repo-tab")).to_have_count(2)
                 click('[data-close="1"]');expect(loc(".repo-tab")).to_have_count(1)
+                click("#add")
+                page.locator("#dialog [data-recent]").filter(has_text=str(base / "clone")).click()
+                expect(loc(".repo-tab.active")).to_have_text("clone")
+                click('[data-close="1"]')
+                click('[data-close="0"]')
+                page.locator("#main [data-recent]").filter(has_text=str(repo)).click()
+                expect(loc(".repo-tab.active")).to_have_text(repo.name)
                 assert not errors,errors
                 print("PASS Chromium: directory autocomplete (mouse, keyboard, nested paths), open, two-commit diff, fetch options, remote URLs, branch, partial stage, commit, stash pop, tag, push/pull, Git Flow, clone and tabs.",flush=True)
             except Exception:

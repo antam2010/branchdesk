@@ -42,6 +42,7 @@ if (location.hash) {
   history.replaceState(null, "", location.pathname);
 }
 let repos = [],
+  recentRepos = [],
   repo = "",
   s = null,
   mode = "history",
@@ -309,12 +310,21 @@ function workView() {
 function enableCommit() {
   $("#do-commit").disabled = !$("#message").value.trim() || !$("#amend")?.checked && !fileList.some(f => f.kind === "index") && s.progress !== "merge" || s.changes.some(conflict);
 }
+function recentList() {
+  if (!recentRepos.length) return "";
+  const buttons = recentRepos.map(path => '<button type="button" data-recent="' + esc(path) +
+    '"><strong>' + esc(path.split("/").pop() || path) + '</strong><small>' + esc(path) + '</small></button>');
+  return '<section class="recent-repos"><h3>최근 저장소</h3><div>' + buttons.join("") + '</div></section>';
+}
+async function loadRecent() {
+  recentRepos = await api("recent");
+}
 function render() {
   ++detailSeq;
   ++diffSeq;
   chrome();
   if (!s) {
-    $("#main").innerHTML = '<div class="blank">' + icon("folder") + '<h2>로컬 저장소 열기</h2><p>작업할 Git 저장소의 WSL 경로를 입력하세요.</p><button class="primary" id="open-empty">저장소 열기</button></div>';
+    $("#main").innerHTML = '<div class="blank">' + icon("folder") + '<h2>로컬 저장소 열기</h2><p>작업할 Git 저장소의 WSL 경로를 입력하세요.</p><button class="primary" id="open-empty">저장소 열기</button>' + recentList() + '</div>';
     return;
   }
   if (mode === "work") workView();else historyView();
@@ -417,7 +427,16 @@ function clickAction(e) {
   const el = e.target.closest("button");
   if (!el || busy) return;
   const d = el.dataset;
-  if (["add", "open-empty"].includes(el.id)) return repositoryDialog();
+  if (["add", "open-empty"].includes(el.id)) return exclusive(async () => {
+    await loadRecent();
+    repositoryDialog();
+  });
+  if (d.recent !== undefined) return exclusive(async () => {
+    if ($("#dialog").open) $("#dialog").close();
+    const next = await api("open", {path: d.recent, exact: true});
+    repos = await api("repos");
+    await refresh(next);
+  });
   if (d.close !== undefined) return exclusive(async () => {
     const closed = repos[Number(d.close)];
     repos = await api("close", {
@@ -429,6 +448,7 @@ function clickAction(e) {
       rev = "";
       compareBase = "";
       waitingForEnd = false;
+      await loadRecent();
       render();
     } else chrome();
   });
@@ -566,5 +586,6 @@ $("#form").onsubmit = e => {
 exclusive(async () => {
   const workspace = await api("workspace");
   repos = workspace.repos;
+  if (!repos.length) await loadRecent();
   if (repos.length) await refresh(workspace.active || repos[0]);else render();
 });

@@ -127,7 +127,7 @@ function repositoryDialog() {
   operations('저장소', [{
     id: 'open',
     label: '기존 저장소 열기',
-    form: path,
+    form: () => recentList() + path(),
     bind: bindDirectoryPicker,
     run: () => enter('open')
   }, {
