@@ -64,7 +64,8 @@ function bindDirectoryPicker() {
         option.id = 'directory-option-' + index;
         option.setAttribute('role', 'option');
         option.setAttribute('aria-selected', 'false');
-        option.textContent = value;
+        option.dataset.path = value;
+        option.textContent = value.slice(path.lastIndexOf('/') + 1);
         list.append(option);
       });
       list.hidden = false;
@@ -72,7 +73,7 @@ function bindDirectoryPicker() {
     }, 120);
   }
   function choose(option) {
-    input.value = option.textContent;
+    input.value = option.dataset.path;
     input.focus();
     input.setSelectionRange(input.value.length, input.value.length);
     suggest();
