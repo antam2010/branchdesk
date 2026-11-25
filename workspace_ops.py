@@ -1,4 +1,5 @@
 """Repository management and Git Flow operations used by Branchdesk."""
+import heapq
 import json
 import os
 import shutil
@@ -51,6 +52,32 @@ def remote_urls(root):
     return [dict(name=name, fetch=line(git(root, "remote", "get-url", "--all", name)).splitlines(),
                  push=line(git(root, "remote", "get-url", "--push", "--all", name)).splitlines())
             for name in line(git(root, "remote")).splitlines()]
+
+
+def directory_suggestions(path):
+    """Complete a single WSL path component without walking the directory tree."""
+    if not isinstance(path, str) or len(path) > 4096 or "\x00" in path:
+        return []
+    if not path:
+        return ["~/", "/"]
+    if path == "~":
+        return ["~/"]
+    parent, slash, prefix = path.rpartition("/")
+    display_parent = parent + slash
+    try:
+        with os.scandir(os.path.expanduser(display_parent or ".")) as entries:
+            def matches():
+                for entry in entries:
+                    if not entry.name.startswith(prefix) or (entry.name.startswith(".") and not prefix.startswith(".")):
+                        continue
+                    try:
+                        if entry.is_dir():
+                            yield display_parent + entry.name + "/"
+                    except OSError:
+                        continue
+            return heapq.nsmallest(50, matches())
+    except OSError:
+        return []
 
 
 def new_repository(data):

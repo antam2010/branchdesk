@@ -59,7 +59,21 @@ def run(base):
             def operation(name):
                 loc("#operation").select_option(name)
             try:
-                click("#open-empty");fill("#repo-path",repo);submit()
+                click("#open-empty")
+                path_input = loc("#repo-path")
+                path_input.fill("/h")
+                page.get_by_role("option", name="/home/", exact=True).click()
+                expect(path_input).to_have_value("/home/")
+                path_input.fill(str(base.parent) + "/" + base.name[:-1])
+                page.get_by_role("option", name=str(base) + "/", exact=True).click()
+                expect(page.get_by_role("option", name=str(repo) + "/", exact=True)).to_be_visible()
+                path_input.fill(str(base / "한"))
+                expect(page.get_by_role("option", name=str(repo) + "/", exact=True)).to_be_visible()
+                path_input.press("ArrowDown")
+                path_input.press("Enter")
+                expect(path_input).to_have_value(str(repo) + "/")
+                expect(loc("#dialog")).to_be_visible()
+                submit()
                 expect(loc(".logrow")).to_have_count(3)
                 click('[data-rev="'+first+'"]')
                 loc('[data-rev="'+last+'"]').click(modifiers=["Control"])
@@ -97,7 +111,7 @@ def run(base):
                 expect(loc(".repo-tab")).to_have_count(2)
                 click('[data-close="1"]');expect(loc(".repo-tab")).to_have_count(1)
                 assert not errors,errors
-                print("PASS Chromium: open, two-commit diff, fetch options, remote URLs, branch, partial stage, commit, stash pop, tag, push/pull, Git Flow, clone and tabs.",flush=True)
+                print("PASS Chromium: directory autocomplete (mouse, keyboard, nested paths), open, two-commit diff, fetch options, remote URLs, branch, partial stage, commit, stash pop, tag, push/pull, Git Flow, clone and tabs.",flush=True)
             except Exception:
                 print(page.locator("body").inner_text()[-3500:],flush=True)
                 print("Page errors:",errors,flush=True)

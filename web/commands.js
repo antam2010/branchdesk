@@ -35,8 +35,83 @@ function operations(title, entries, initial) {
   $('#operation').onchange = paint;
   paint();
 }
+function bindDirectoryPicker() {
+  const input = $('#repo-path');
+  const list = $('#repo-path-options');
+  let timer, generation = 0, active = -1;
+  function close() {
+    clearTimeout(timer);
+    generation++;
+    active = -1;
+    list.hidden = true;
+    list.replaceChildren();
+    input.setAttribute('aria-expanded', 'false');
+    input.removeAttribute('aria-activedescendant');
+  }
+  function suggest() {
+    close();
+    const request = generation, path = input.value;
+    timer = setTimeout(async () => {
+      let paths;
+      try {
+        paths = await api('directories', {path});
+      } catch {
+        return; // A typed path can still be submitted.
+      }
+      if (request !== generation || document.activeElement !== input || !paths.length) return;
+      paths.forEach((value, index) => {
+        const option = document.createElement('li');
+        option.id = 'directory-option-' + index;
+        option.setAttribute('role', 'option');
+        option.setAttribute('aria-selected', 'false');
+        option.textContent = value;
+        list.append(option);
+      });
+      list.hidden = false;
+      input.setAttribute('aria-expanded', 'true');
+    }, 120);
+  }
+  function choose(option) {
+    input.value = option.textContent;
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+    suggest();
+  }
+  input.oninput = input.onfocus = suggest;
+  input.onblur = close;
+  list.onmousedown = event => event.preventDefault(); // Keep the text caret in the field.
+  list.onclick = event => {
+    const option = event.target.closest('[role="option"]');
+    if (option) choose(option);
+  };
+  input.onkeydown = event => {
+    if (event.isComposing) return;
+    if (event.key === 'Escape' && !list.hidden) {
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+    } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (list.hidden) { suggest(); return; }
+      const options = list.children;
+      if (active >= 0) options[active].setAttribute('aria-selected', 'false');
+      if (event.key === 'ArrowDown') active = (active + 1) % options.length;
+      else active = active <= 0 ? options.length - 1 : active - 1;
+      const option = options[active];
+      option.setAttribute('aria-selected', 'true');
+      input.setAttribute('aria-activedescendant', option.id);
+      option.scrollIntoView({block: 'nearest'});
+    } else if (event.key === 'Enter' && active >= 0) {
+      event.preventDefault();
+      choose(list.children[active]);
+    }
+  };
+}
 function repositoryDialog() {
-  const path = () => textField('repo-path', 'WSL 저장소 경로');
+  const path = () => '<div><label for="repo-path">WSL 저장소 경로</label>' +
+    '<input class="form-input" id="repo-path" role="combobox" aria-expanded="false" ' +
+    'aria-autocomplete="list" aria-controls="repo-path-options" autocomplete="off" spellcheck="false" required>' +
+    '<ul id="repo-path-options" role="listbox" aria-label="추천 폴더" hidden></ul></div>';
   const enter = async mode => {
     const input = {
       mode,
@@ -52,18 +127,22 @@ function repositoryDialog() {
     id: 'open',
     label: '기존 저장소 열기',
     form: path,
+    bind: bindDirectoryPicker,
     run: () => enter('open')
   }, {
     id: 'clone',
     label: '원격 저장소 클론',
     form: () => textField('repo-url', '원격 주소') + path(),
+    bind: bindDirectoryPicker,
     run: () => enter('clone')
   }, {
     id: 'init',
     label: '빈 저장소 만들기',
     form: () => path() + textField('initial', '첫 브랜치', 'main'),
+    bind: bindDirectoryPicker,
     run: () => enter('init')
   }]);
+  $('#repo-path').focus();
 }
 function fetchDialog() {
   dialog('페치', '<label>원격 저장소<select id="fetch-remote">' + optionList([['', '모든 원격'], ...s.remotes]) + '</select></label>' + checkField('fetch-prune', '리모트에서 제거된 브랜치 정리하기') + checkField('fetch-tags', '모든 태그 가져오기'), '페치', () => mutation('fetch', {

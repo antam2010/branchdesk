@@ -80,7 +80,9 @@ class Handler(BaseHTTPRequestHandler):
             d = json.loads(self.rfile.read(size))
             if not isinstance(d, dict):
                 raise ValueError("잘못된 요청입니다.")
-            if self.path == "/api/open":
+            if self.path == "/api/directories":
+                value = workspace_ops.directory_suggestions(d["path"])
+            elif self.path == "/api/open":
                 value = self.server.register(d["path"])
             elif self.path == "/api/new":
                 value = self.server.register(workspace_ops.new_repository(d))
