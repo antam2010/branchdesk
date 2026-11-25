@@ -360,6 +360,7 @@ async function loadRecent() {
   recentRepos = await api("recent");
 }
 function render() {
+  if (typeof closeCommitMenu === "function") closeCommitMenu(false);
   ++detailSeq;
   ++diffSeq;
   chrome();
@@ -411,7 +412,7 @@ async function mutation(op, more = {}) {
       ...more
     });
   } catch (error) {
-    if (["merge", "pull", "apply_stash", "stash_pop", "rebase", "cherry_pick", "flow_finish", "continue", "abort"].includes(op)) {
+    if (["merge", "pull", "apply_stash", "stash_pop", "rebase", "cherry_pick", "flow_finish", "continue", "abort", "merge_commit", "rebase_commit", "revert_commit", "reorder_commits", "cherry_pick_commit"].includes(op)) {
       mode = "work";
       await refresh();
     }

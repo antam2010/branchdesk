@@ -15,11 +15,13 @@ class GitError(ValueError):
     pass
 
 
-def git(root, *args, allowed=(0,), limit=META_LIMIT, preview=False, timeout=90, editor="false", object_dir=None):
+def git(root, *args, allowed=(0,), limit=META_LIMIT, preview=False, timeout=90, editor="false", object_dir=None, sequence_editor=None):
     env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_PAGER="cat",
                GIT_LITERAL_PATHSPECS="1", GIT_EDITOR=editor, GIT_MERGE_AUTOEDIT="no")
     if object_dir is not None:
         env["GIT_OBJECT_DIRECTORY"] = str(object_dir)
+    if sequence_editor is not None:
+        env["GIT_SEQUENCE_EDITOR"] = sequence_editor
     command = ["git", "--no-pager", "-c", "color.ui=false", "-c", "core.quotepath=false",
                "-C", os.fspath(root), *args]
     proc = subprocess.Popen(command, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
@@ -252,5 +254,8 @@ def act(root, d):
         else:
             git(root, "push", "--set-upstream", "--", remote, "HEAD:" + target)
     else:
+        from commit_ops import ACTIONS, operate as commit_operate
+        if op in ACTIONS:
+            return commit_operate(root, d)
         from workspace_ops import operate
         operate(root, d)

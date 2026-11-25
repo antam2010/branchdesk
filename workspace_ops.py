@@ -131,7 +131,7 @@ def flow_config(root):
 
 def in_progress(root):
     directory = Path(line(git(root, "rev-parse", "--absolute-git-dir")))
-    for name, markers in (("rebase", ("rebase-merge","rebase-apply")), ("cherry-pick", ("CHERRY_PICK_HEAD",)),
+    for name, markers in (("rebase", ("rebase-merge","rebase-apply")), ("cherry-pick", ("CHERRY_PICK_HEAD",)), ("revert", ("REVERT_HEAD",)),
                           ("merge", ("MERGE_HEAD",))):
         if any((directory / marker).exists() for marker in markers):
             return name
@@ -272,6 +272,8 @@ def continue_operation(root, progress):
         git(root,"commit","--no-edit")
     elif progress == "cherry-pick":
         git(root,"cherry-pick","--continue",editor="true")
+    elif progress == "revert":
+        git(root,"revert","--continue",editor="true")
     else:
         # GIT_EDITOR has precedence over core.editor; accept Git's existing message.
         git(root,"rebase","--continue", editor="true")

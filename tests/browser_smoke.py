@@ -77,6 +77,59 @@ def run(base):
                 expect(loc("#dialog")).to_be_visible()
                 submit()
                 expect(loc(".logrow")).to_have_count(3)
+                # Commands bind to the right-clicked commit, not the prior selection.
+                menu = page.get_by_role('menu', name='커밋 작업')
+                first_row = loc('[data-rev="' + first + '"]')
+                first_row.focus(); first_row.press('Shift+F10')
+                expect(menu).to_be_visible()
+                expect(menu.get_by_role('menuitem', name='병합…', exact=True)).to_be_disabled()
+                page.keyboard.press('ArrowDown'); page.keyboard.press('Escape')
+                expect(menu).to_have_count(0)
+                expect(first_row).to_be_focused()
+                first_row.click(button='right')
+                menu.get_by_role('menuitem', name='브랜치…', exact=True).click()
+                fill('#new-name', 'context-at-first'); submit()
+                assert git('rev-parse', 'context-at-first') == first
+                assert git('branch', '--show-current') == 'main'
+                first_row.click(button='right')
+                with page.expect_download() as download_info:
+                    menu.get_by_role('menuitem', name='아카이브…', exact=True).click()
+                import zipfile
+                with zipfile.ZipFile(download_info.value.path()) as exported:
+                    assert exported.read('source/sample.txt') == b'line 1\n'
+                first_row.click(button='right')
+                with page.expect_download() as download_info:
+                    menu.get_by_role('menuitem', name='패치 생성…', exact=True).click()
+                assert b'new file mode' in Path(download_info.value.path()).read_bytes()
+                first_row.click(button='right')
+                menu.get_by_role('menuitem', name='이 커밋까지 현재 브랜치를 초기화…', exact=True).click()
+                loc('#reset-mode').select_option('hard')
+                expect(loc('#confirm')).to_be_disabled()
+                fill('#hard-confirm', 'HARD'); expect(loc('#confirm')).to_be_enabled()
+                click('#cancel'); assert git('rev-parse', 'HEAD') == last
+                first_row.click(button='right')
+                menu.get_by_role('menuitem', name=first[:7] + '의 자식 커밋을 쌍방향 재배치…', exact=True).click()
+                expect(loc('.rebase-row')).to_have_count(2)
+                loc('.rebase-row select').first.select_option('squash')
+                expect(loc('#confirm')).to_be_disabled()
+                click('#cancel')
+                last_row = loc('[data-rev="' + last + '"]')
+                last_row.click(button='right')
+                expect(menu.get_by_role('menuitem', name='체크아웃…', exact=True)).to_be_disabled()
+                expect(menu.get_by_role('menuitem', name='외부 비교 도구', exact=False)).to_be_disabled()
+                page.context.grant_permissions(['clipboard-read', 'clipboard-write'])
+                menu.get_by_role('menuitem', name='SHA 값을 클립보드에 복사', exact=True).click()
+                assert page.evaluate('navigator.clipboard.readText()') == last
+                last_row.click(button='right')
+                menu.get_by_role('menuitem', name='추가 작업', exact=False).click()
+                menu.get_by_role('menuitem', name='‹ 커밋 작업으로', exact=True).click()
+                expect(menu.get_by_role('menuitem', name='태그…', exact=True)).to_be_visible()
+                menu.get_by_role('menuitem', name='태그…', exact=True).click()
+                fill('#tag-name', 'context-tip'); submit()
+                assert git('rev-parse', 'context-tip') == last
+                git('tag', '-d', 'context-tip')
+                git('branch', '-d', 'context-at-first')
+                tool('refresh')
                 click('[data-rev="'+first+'"]')
                 loc('[data-rev="'+last+'"]').click(modifiers=["Control"])
                 expect(loc(".badge")).to_have_text("두 커밋 비교")
@@ -147,7 +200,7 @@ def run(base):
                 page.locator("#main [data-recent]").filter(has_text=str(repo)).click()
                 expect(loc(".repo-tab.active")).to_have_text(repo.name)
                 assert not errors,errors
-                print("PASS Chromium: directory autocomplete (mouse, keyboard, nested paths), open, two-commit diff, fetch options, remote URLs, branch, partial stage, commit, stash pop, tag, push/pull, Git Flow, clone tabs, recent repositories, tree/list, expanded diff, keyboard and pointer resizing.",flush=True)
+                print("PASS Chromium: commit context menu (keyboard, disabled commands, selected branch/tag target, ZIP/patch downloads, reset confirmation, rebase plan, clipboard, extra actions), directory autocomplete, two-commit diff, fetch, remote URLs, branch, partial stage, commit, stash, tag, push/pull, Git Flow, clone, recent repositories, tree/list, expanded diff, pane resizing.",flush=True)
             except Exception:
                 print(page.locator("body").inner_text()[-3500:],flush=True)
                 print("Page errors:",errors,flush=True)

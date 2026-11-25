@@ -16,11 +16,12 @@ from pathlib import Path
 import gitdesk
 import partial
 import workspace_ops
+import commit_ops
 from tab_store import TabStore
 
 WEB = Path(__file__).resolve().parent / "web"
 ASSETS = {"/panes.js": "panes.js", "/": "index.html", "/app.js": "app.js", "/commands.js": "commands.js", "/style.css": "style.css",
-          "/icon.png": "icon.png", "/favicon.ico": "favicon.ico"}
+          "/icon.png": "icon.png", "/favicon.ico": "favicon.ico", "/context.js": "context.js"}
 
 
 class Desk(ThreadingHTTPServer):
@@ -159,6 +160,12 @@ class Handler(BaseHTTPRequestHandler):
                         value = gitdesk.state(root, d.get("count", 150))
                     elif self.path == "/api/detail":
                         value = gitdesk.detail(root, d["rev"], d.get("base"))
+                    elif self.path == "/api/commit-context":
+                        value = commit_ops.context(root, d["rev"])
+                    elif self.path == "/api/rebase-plan":
+                        value = commit_ops.rebase_plan(root, d["rev"])
+                    elif self.path == "/api/export":
+                        value = commit_ops.export(root, d)
                     elif self.path == "/api/diff":
                         value = gitdesk.diff(root, d)
                     elif self.path in ("/api/conflict","/api/resolve"):
