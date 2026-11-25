@@ -2,7 +2,7 @@
 
 [English](README.md) · **한국어** · [日本語](README.ja.md)
 
-Windows와 WSL 저장소를 환경별 Git으로 관리하는 한국어 Git GUI. Windows 저장소는 Windows Git, WSL 저장소는 해당 배포판의 Git과 Python으로 처리한다. 화면은 Windows의 Edge 앱 창에서 열린다.
+Windows와 WSL 저장소를 환경별 Git으로 관리하는 한국어 Git GUI. Windows 저장소는 Windows Git, WSL 저장소는 해당 배포판의 Git과 Python으로 처리한다. 화면은 Windows의 Edge 앱 창에서 열린다. 오른쪽 위에서 **한국어·English·日本語**를 선택하며, 재실행·업데이트 후에도 기억한다. 저장소·파일·브랜치 이름과 커밋 메시지, Git이 반환한 원문은 번역하지 않는다.
 
 ## Windows에서 더블클릭으로 실행
 
@@ -88,6 +88,12 @@ alias branchdesk='python3 "$HOME/tools/branchdesk/branchdesk.py"'
 ```
 
 브라우저 자동 실행을 끄거나 포트를 지정할 때는 `--no-browser`, `--port 8765`를 사용한다. 기본 설정은 사용 가능한 포트를 자동 선택한다. 접속 키는 실행할 때 새로 발급되므로 새로 시작한 세션에는 터미널에 표시된 주소를 사용한다.
+
+## 홈과 최근 저장소
+
+탭 표시줄 왼쪽 **홈**을 누르면 다른 저장소를 닫지 않고 저장된 경로 목록을 볼 수 있다. 목록의 경로를 클릭하면 저장소를 열거나 이미 열린 탭으로 돌아간다. 열린 탭과 작성 중인 커밋 메시지는 유지한다. 홈에서는 저장소를 선택할 때까지 Git 작업을 비활성화하며, 저장소 열기와 목록에서 제거 기능을 사용할 수 있다.
+
+언어 선택은 Windows EXE에서 `%LOCALAPPDATA%\Branchdesk\language.txt`, 소스 실행에서는 사용자 상태 폴더의 `language.txt`에 저장한다. Windows 시작·업데이트·창 열기 안내도 저장된 언어를 사용한다.
 
 ## 저장소 목록 정리
 

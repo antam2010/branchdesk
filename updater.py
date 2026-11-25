@@ -151,6 +151,8 @@ class Updater:
         self.folder = Path(tempfile.mkdtemp(prefix='branchdesk-update-'))
         (self.folder / 'Branchdesk.exe').write_bytes(data)
         (self.folder / 'update.ps1').write_bytes(b'\xef\xbb\xbf' + (Path(__file__).parent / 'windows/update.ps1').read_bytes())
+        from language import copy_windows_translations
+        copy_windows_translations(self.folder)
         self._set(state='ready', sha256=hashlib.sha256(data).hexdigest())
 
     def apply(self, ticket, ui_state):

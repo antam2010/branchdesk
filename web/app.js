@@ -9,6 +9,7 @@ const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({
   "'": "&#39;"
 })[c]);
 const paths = {
+  home: "M3 11 12 3l9 8 M5 10v11h14V10 M9 21v-7h6v7",
   branch: "M6 4v13m0-4c7 0 11-2 11-7 M8 4a2 2 0 1 1-4 0 2 2 0 0 1 4 0 M8 19a2 2 0 1 1-4 0 2 2 0 0 1 4 0 M19 4a2 2 0 1 1-4 0 2 2 0 0 1 4 0",
   repo: "M5 3h14v18H6a2 2 0 0 1-2-2V5a2 2 0 0 1 1-2 M5 17h14 M8 6h6",
   merge: "M6 4v14 M18 5c0 8-12 6-12 12 M8 4a2 2 0 1 1-4 0 2 2 0 0 1 4 0 M8 20a2 2 0 1 1-4 0 2 2 0 0 1 4 0 M20 4a2 2 0 1 1-4 0 2 2 0 0 1 4 0",
@@ -54,6 +55,7 @@ let repos = [],
   query = "";
 let compareBase = "",
   waitingForEnd = false;
+let showingHome = false;
 let busy = false,
   detailSeq = 0,
   diffSeq = 0,
@@ -75,10 +77,10 @@ async function api(name, data = {}) {
     })
   });
   const payload = await res.json();
-  if (!res.ok) throw Error(payload.error || "요청을 처리하지 못했습니다.");
+  if (!res.ok) throw Error(translatedMessage(payload.error) || L("요청을 처리하지 못했습니다."));
   if (payload.warning && payload.warning !== tabWarningShown) {
     tabWarningShown = payload.warning;
-    notice(payload.warning, true);
+    notice(translatedMessage(payload.warning), true);
   }
   return payload.value;
 }
@@ -88,7 +90,7 @@ function notice(msg, error = false) {
   $("#toast").textContent = msg;
   const b = document.createElement("button");
   b.textContent = "×";
-  b.ariaLabel = "닫기";
+  b.ariaLabel = L("닫기");
   b.onclick = () => $("#toast").hidden = true;
   $("#toast").append(b);
   if (!error) toastTimer = setTimeout(() => $("#toast").hidden = true, 3500);
@@ -97,7 +99,7 @@ async function exclusive(job) {
   if (busy) return;
   busy = true;
   document.body.classList.add("busy");
-  $("#foot-status").textContent = "Git 작업 중…";
+  $("#foot-status").textContent = L("Git 작업 중…");
   try {
     await job();
   } catch (e) {
@@ -105,38 +107,38 @@ async function exclusive(job) {
   } finally {
     busy = false;
     document.body.classList.remove("busy");
-    $("#foot-status").textContent = "로컬 Git";
+    $("#foot-status").textContent = L("로컬 Git");
   }
 }
 function tool(k, label, disabled = false) {
-  const title = ({remote: '원격 저장소 웹페이지를 기본 브라우저로 열기', settings: 'Git 원격 주소 추가·수정·관리', terminal: '현재 저장소의 터미널 열기', folder: '현재 저장소 폴더를 탐색기로 열기'})[k] || label;
+  const title = ({remote: L('원격 저장소 웹페이지를 기본 브라우저로 열기'), settings: L('Git 원격 주소 추가·수정·관리'), terminal: L('현재 저장소의 터미널 열기'), folder: L('현재 저장소 폴더를 탐색기로 열기')})[k] || label;
   return '<button title="' + esc(title) + '" class="tool" data-tool="' + k + '" ' + (disabled ? 'disabled' : '') + '>' + icon(k) + esc(label) + '</button>';
 }
 const environmentRepoPath = value => value?.startsWith('bd:') ? value.slice(value.indexOf(':', 3) + 1) : value;
 const environmentRepoName = value => environmentRepoPath(value)?.split(/[\\/]/).pop() || value;
 function chrome() {
-  $("#tabs").innerHTML = repos.map((p, i) => '<button class="repo-tab ' + (p === repo ? 'active' : '') + '" data-tab="' + i + '" title="' + esc(environmentRepoPath(p)) + '">' + icon("repo") + esc(environmentRepoName(p)) + '</button><button class="close-tab" data-close="' + i + '" aria-label="' + esc(p) + ' 탭 닫기">×</button>').join("") + '<button class="add-tab" id="add">' + icon("plus") + '저장소 열기</button>';
-  const off = !s,
+  $("#tabs").innerHTML = '<button id="home-open" class="home-tab ' + (showingHome || !s ? 'active' : '') + '" title="' + esc(L("홈 화면에서 최근 저장소 열기")) + '">' + icon("home") + esc(L("홈")) + '</button>' + repos.map((p, i) => '<button class="repo-tab ' + (p === repo && !showingHome ? 'active' : '') + '" data-tab="' + i + '" title="' + esc(environmentRepoPath(p)) + '">' + icon("repo") + esc(environmentRepoName(p)) + '</button><button class="close-tab" data-close="' + i + '" aria-label="' + esc(p) + L(' 탭 닫기">×</button>')).join("") + '<button class="add-tab" id="add">' + icon("plus") + L('저장소 열기</button>');
+  const off = showingHome || !s,
     remote = off || !s.remotes.length;
-  $("#toolbar").innerHTML = tool("commit", "커밋", off) + '<span class="separator"></span>' + tool("pull", "풀", remote) + tool("push", "푸시", remote) + tool("fetch", "페치", remote) + '<span class="separator"></span>' + tool("branch", "브랜치", off || !s.head) + tool("merge", "병합", off || !s.branch || !s.refs.some(r => r.group === "heads" && r.name !== s.branch)) + tool("stash", "스태시", off || !s.head || !s.changes.length) + tool("tag", "태그", off || !s.head) + tool("flow", "Git Flow", off || !s.head) + tool("remote", "원격", remote) + tool("settings", "원격 설정", off) + tool("terminal", "터미널", off) + tool("folder", "탐색기", off) + '<span class="push-right"></span>' + tool("refresh", "새로고침", off);
-  $("#go-log").innerHTML = icon("history") + "히스토리";
-  $("#go-work").innerHTML = icon("files") + '파일 상태<span class="count">' + (s?.changes.length ?? 0) + '</span>';
-  $("#go-log").className = mode === "history" ? "active-nav" : "";
-  $("#go-work").className = mode === "work" ? "active-nav" : "";
+  $("#toolbar").innerHTML = tool("commit", L("커밋"), off) + '<span class="separator"></span>' + tool("pull", L("풀"), remote) + tool("push", L("푸시"), remote) + tool("fetch", L("페치"), remote) + '<span class="separator"></span>' + tool("branch", L("브랜치"), off || !s.head) + tool("merge", L("병합"), off || !s.branch || !s.refs.some(r => r.group === "heads" && r.name !== s.branch)) + tool("stash", L("스태시"), off || !s.head || !s.changes.length) + tool("tag", L("태그"), off || !s.head) + tool("flow", "Git Flow", off || !s.head) + tool("remote", L("원격"), remote) + tool("settings", L("원격 설정"), off) + tool("terminal", L("터미널"), off) + tool("folder", L("탐색기"), off) + '<span class="push-right"></span>' + tool("refresh", L("새로고침"), off);
+  $("#go-log").innerHTML = icon("history") + L("히스토리");
+  $("#go-work").innerHTML = icon("files") + L('파일 상태<span class="count">') + (s?.changes.length ?? 0) + '</span>';
+  $("#go-log").className = !off && mode === "history" ? "active-nav" : "";
+  $("#go-work").className = !off && mode === "work" ? "active-nav" : "";
   $("#go-log").disabled = off;
   $("#go-work").disabled = off;
-  $("#foot-repo").textContent = (s ? (s.environmentName.startsWith(s.environmentPlatform) ? s.environmentName : s.environmentPlatform + " · " + s.environmentName) + " · " + s.displayPath : environmentRepoPath(repo)) || "저장소를 열어 주세요";
-  $("#nav-refs").innerHTML = s ? [["heads", "브랜치", "branch"], ["remotes", "원격 브랜치", "remote"], ["tags", "태그", "tag"]].map(([g, name, k]) => {
+  $("#foot-repo").textContent = showingHome ? L("홈 · 최근 저장소") : (s ? (s.environmentName.startsWith(s.environmentPlatform) ? s.environmentName : s.environmentPlatform + " · " + s.environmentName) + " · " + s.displayPath : environmentRepoPath(repo)) || L("저장소를 열어 주세요");
+  $("#nav-refs").innerHTML = !off ? [["heads", L("브랜치"), "branch"], ["remotes", L("원격 브랜치"), "remote"], ["tags", L("태그"), "tag"]].map(([g, name, k]) => {
     const refs = s.refs.map((r, i) => ({
       ...r,
       i
     })).filter(r => r.group === g);
-    return '<details data-group="' + g + '" ' + (collapsed.has(g) ? '' : 'open') + '><summary>' + name + ' · ' + refs.length + '</summary>' + (refs.map(r => '<button class="nav-ref ' + (g === "heads" && r.name === s.branch ? 'current-ref' : '') + '" data-ref="' + r.i + '" title="' + esc(r.name) + '">' + icon(k) + '<span class="ellipsis">' + esc(r.name) + '</span>' + (g === "heads" && r.name === s.branch ? '<small>현재</small>' : '') + '</button>').join("") || '<div class="no-refs">없음</div>') + '</details>';
-  }).join("") + '<details data-group="stash" ' + (collapsed.has("stash") ? '' : 'open') + '><summary>스태시 · ' + s.stashes.length + '</summary>' + (s.stashes.map((item, i) => '<button class="nav-ref" data-stash="' + i + '" title="' + esc(item.title) + '">' + icon("stash") + '<span class="ellipsis">' + esc(item.title) + '</span></button>').join("") || '<div class="no-refs">없음</div>') + '</details>' : "";
+    return '<details data-group="' + g + '" ' + (collapsed.has(g) ? '' : 'open') + '><summary>' + name + ' · ' + refs.length + '</summary>' + (refs.map(r => '<button class="nav-ref ' + (g === "heads" && r.name === s.branch ? 'current-ref' : '') + '" data-ref="' + r.i + '" title="' + esc(r.name) + '">' + icon(k) + '<span class="ellipsis">' + esc(r.name) + '</span>' + (g === "heads" && r.name === s.branch ? L('<small>현재</small>') : '') + '</button>').join("") || L('<div class="no-refs">없음</div>')) + '</details>';
+  }).join("") + '<details data-group="stash" ' + (collapsed.has("stash") ? '' : 'open') + L('><summary>스태시 · ') + s.stashes.length + '</summary>' + (s.stashes.map((item, i) => '<button class="nav-ref" data-stash="' + i + '" title="' + esc(item.title) + '">' + icon("stash") + '<span class="ellipsis">' + esc(item.title) + '</span></button>').join("") || L('<div class="no-refs">없음</div>')) + '</details>' : "";
 }
 function head(title, search = false) {
   const b = s.branch || (s.head ? s.head.slice(0, 8) : "HEAD");
-  return '<div class="page-head"><h1>' + title + '</h1><span class="head-branch">' + icon("branch") + esc(b) + '</span>' + (search ? '<label class="search">' + icon("search") + '<input id="search" aria-label="커밋 검색" placeholder="메시지, 작성자, 해시 검색" value="' + esc(query) + '"></label>' : '') + '</div>';
+  return '<div class="page-head"><h1>' + title + '</h1><span class="head-branch">' + icon("branch") + esc(b) + '</span>' + (search ? '<label class="search">' + icon("search") + L('<input id="search" aria-label="커밋 검색" placeholder="메시지, 작성자, 해시 검색" value="') + esc(query) + '"></label>' : '') + '</div>';
 }
 const colors = ["#25866c", "#6789bd", "#bb8242", "#936db4", "#548e9b", "#a76679"];
 function graphData(commits) {
@@ -202,10 +204,10 @@ function drawRows() {
   }) => {
     const refs = (labels.get(c.id) || []).map(r => '<span class="ref ' + r.group + '">' + esc(r.name) + '</span>').join("");
     return '<button class="logrow ' + (rev === c.id ? 'selected' : compareBase === c.id ? 'comparison-base' : '') + '" data-rev="' + c.id + '">' + (needle ? '<span>' + icon("commit") + '</span>' : '<svg class="graph" width="' + graph.width + '" height="33" aria-hidden="true">' + graph.rows[i] + '</svg>') + '<span class="ellipsis" title="' + esc(c.subject) + '">' + refs + esc(c.subject) + '</span><span class="ellipsis">' + esc(c.author) + '</span><span class="date">' + esc(c.date.slice(0, 10)) + '</span><span class="hash">' + c.id.slice(0, 7) + '</span></button>';
-  }).join("") || empty(needle ? "불러온 커밋에서 검색 결과가 없습니다." : "첫 커밋을 만들면 이곳에 표시됩니다.");
+  }).join("") || empty(needle ? L("불러온 커밋에서 검색 결과가 없습니다.") : L("첫 커밋을 만들면 이곳에 표시됩니다."));
 }
 function historyView() {
-  $("#main").innerHTML = head("히스토리", true) + (rev ? '<div class="compare-bar"><button id="compare-pin">' + (waitingForEnd ? '대상 커밋 선택 중…' : '비교 시작점 지정') + '</button>' + (compareBase ? '<span>' + esc(compareBase.slice(0, 8)) + ' → ' + (waitingForEnd ? '그래프에서 대상 선택' : esc(rev.slice(0, 8))) + '</span><button id="compare-clear">비교 해제</button>' : '<span>두 번째 커밋을 Ctrl 또는 Shift와 함께 클릭해 비교</span>') + '<button class="right" id="cherry">체리픽</button></div>' : '') + '<div class="history-panes"><div class="history"><div class="table"><div class="loghead"><span>그래프</span><span>커밋 메시지</span><span>작성자</span><span>날짜</span><span>커밋</span></div><div id="rows"></div></div>' + (s.more && limit < 5000 ? '<button class="more" id="more">이전 커밋 더 보기 ↓</button>' : '') + '</div>' + separator('history') + '<section class="inspect" id="inspect"></section></div>';
+  $("#main").innerHTML = head(L("히스토리"), true) + (rev ? '<div class="compare-bar"><button id="compare-pin">' + (waitingForEnd ? L('대상 커밋 선택 중…') : L('비교 시작점 지정')) + '</button>' + (compareBase ? '<span>' + esc(compareBase.slice(0, 8)) + ' → ' + (waitingForEnd ? L('그래프에서 대상 선택') : esc(rev.slice(0, 8))) + L('</span><button id="compare-clear">비교 해제</button>') : L('<span>두 번째 커밋을 Ctrl 또는 Shift와 함께 클릭해 비교</span>')) + L('<button class="right" id="cherry">체리픽</button></div>') : '') + L('<div class="history-panes"><div class="history"><div class="table"><div class="loghead"><span>그래프</span><span>커밋 메시지</span><span>작성자</span><span>날짜</span><span>커밋</span></div><div id="rows"></div></div>') + (s.more && limit < 5000 ? L('<button class="more" id="more">이전 커밋 더 보기 ↓</button>') : '') + '</div>' + separator('history') + '<section class="inspect" id="inspect"></section></div>';
   graph = graphData(s.commits);
   labels = new Map();
   for (const r of s.refs) {
@@ -214,11 +216,11 @@ function historyView() {
   }
   $(".table").style.setProperty("--graph", graph.width + "px");
   drawRows();
-  if (rev) loadDetail();else $("#inspect").innerHTML = empty("선택한 커밋이 없습니다.");
+  if (rev) loadDetail();else $("#inspect").innerHTML = empty(L("선택한 커밋이 없습니다."));
 }
 let treeView = false;
 function fileRow(f, i, editable, label = f.path) {
-  return '<div class="file ' + (selected?.kind === f.kind && selected?.path === f.path ? 'selected' : '') + '"><button data-file="' + i + '" title="' + esc(f.path) + '"><span class="status-code code-' + esc(f.code) + '">' + esc(f.code) + '</span><span class="ellipsis">' + esc(label) + '</span></button>' + (editable ? '<button class="toggle" data-toggle="' + i + '" title="' + (f.kind === "index" ? "스테이징 해제" : "스테이징") + '" aria-label="' + esc(f.path) + (f.kind === "index" ? ' 스테이징 해제">−' : ' 스테이징">+') + '</button>' : '') + '</div>';
+  return '<div class="file ' + (selected?.kind === f.kind && selected?.path === f.path ? 'selected' : '') + '"><button data-file="' + i + '" title="' + esc(f.path) + '"><span class="status-code code-' + esc(f.code) + '">' + esc(f.code) + '</span><span class="ellipsis">' + esc(label) + '</span></button>' + (editable ? '<button class="toggle" data-toggle="' + i + '" title="' + (f.kind === "index" ? L("스테이징 해제") : L("스테이징")) + '" aria-label="' + esc(f.path) + (f.kind === "index" ? L(' 스테이징 해제">−') : L(' 스테이징">+')) + '</button>' : '') + '</div>';
 }
 function treeRows(entries, editable) {
   const node = () => ({folders: new Map(), files: []});
@@ -247,23 +249,23 @@ function filesHtml(group, editable) {
     i
   })).filter(v => v.f.kind === group);
   const title = {
-    index: "스테이징된 파일",
-    work: "스테이징하지 않은 파일",
-    commit: "변경 파일"
+    index: L("스테이징된 파일"),
+    work: L("스테이징하지 않은 파일"),
+    commit: L("변경 파일")
   }[group];
-  return '<div class="subhead">' + title + ' <span>' + entries.length + '</span>' + (editable && entries.length ? '<button data-all="' + group + '">' + (group === "work" ? "모두 스테이지" : "모두 해제") + '</button>' : '') + '</div>' + ((treeView ? treeRows(entries, editable) : entries.map(({f, i}) => fileRow(f, i, editable)).join("")) || empty("파일 없음"));
+  return '<div class="subhead">' + title + ' <span>' + entries.length + '</span>' + (editable && entries.length ? '<button data-all="' + group + '">' + (group === "work" ? L("모두 스테이지") : L("모두 해제")) + '</button>' : '') + '</div>' + ((treeView ? treeRows(entries, editable) : entries.map(({f, i}) => fileRow(f, i, editable)).join("")) || empty(L("파일 없음")));
 }
 function paintFiles() {
-  const choices = '<div class="file-views" role="group" aria-label="변경 파일 보기">' +
-    '<button data-file-view="list" aria-pressed="' + !treeView + '">목록</button>' +
-    '<button data-file-view="tree" aria-pressed="' + treeView + '">트리</button></div>';
+  const choices = L('<div class="file-views" role="group" aria-label="변경 파일 보기">') +
+    '<button data-file-view="list" aria-pressed="' + !treeView + L('">목록</button>') +
+    '<button data-file-view="tree" aria-pressed="' + treeView + L('">트리</button></div>');
   $(".files").innerHTML = choices + (mode === "work" ? filesHtml("index", true) + filesHtml("work", true) : filesHtml("commit", false));
 }
 async function loadDetail() {
   const serial = ++detailSeq;
   ++diffSeq;
   const pane = $("#inspect");
-  pane.innerHTML = empty("변경 내역을 불러오는 중…");
+  pane.innerHTML = empty(L("변경 내역을 불러오는 중…"));
   try {
     const detail = await api("detail", {
       rev,
@@ -271,7 +273,7 @@ async function loadDetail() {
     });
     if (serial !== detailSeq || mode !== "history" || !pane.isConnected) return;
     const c = s.commits.find(c => c.id === rev);
-    pane.innerHTML = '<div class="commit-head"><div class="meta"><span class="badge">' + (compareBase && !waitingForEnd ? "두 커밋 비교" : "커밋") + '</span><span class="hash">' + rev.slice(0, 10) + '</span>' + esc(c ? [c.author, c.date.slice(0, 10)].join(" · ") : "") + '</div><div class="commit-title">' + esc(compareBase && !waitingForEnd ? compareBase.slice(0, 10) + " → " + rev.slice(0, 10) + " · " + detail.files.length + "개 변경 파일" : detail.message) + '</div></div><div class="split"><div class="files"></div>' + separator('files') + '<div class="diff"></div></div>';
+    pane.innerHTML = '<div class="commit-head"><div class="meta"><span class="badge">' + (compareBase && !waitingForEnd ? L("두 커밋 비교") : L("커밋")) + '</span><span class="hash">' + rev.slice(0, 10) + '</span>' + esc(c ? [c.author, c.date.slice(0, 10)].join(" · ") : "") + '</div><div class="commit-title">' + esc(compareBase && !waitingForEnd ? compareBase.slice(0, 10) + " → " + rev.slice(0, 10) + " · " + detail.files.length + L("개 변경 파일") : detail.message) + '</div></div><div class="split"><div class="files"></div>' + separator('files') + '<div class="diff"></div></div>';
     fileList = detail.files.map(f => ({
       ...f,
       kind: "commit"
@@ -286,23 +288,23 @@ async function loadDetail() {
 let previewRequest;
 function patchHtml(patch) {
   if (patch && typeof patch === 'object' && patch.type === 'file') {
-    const heading = '<div class="file-preview-heading">' + esc(patch.title || '파일 전체 내용') + '</div>';
-    if (patch.message) return heading + empty(patch.message);
-    if (patch.empty) return heading + empty('빈 파일입니다. 파일 내용이 없습니다.');
+    const heading = '<div class="file-preview-heading">' + esc(translatedMessage(patch.title) || L('파일 전체 내용')) + '</div>';
+    if (patch.message) return heading + empty(translatedMessage(patch.message));
+    if (patch.empty) return heading + empty(L('빈 파일입니다. 파일 내용이 없습니다.'));
     const lines = patch.text.split('\n'), shown = lines.slice(0, 3000);
-    return heading + '<div class="patch full-file-preview">' + shown.map((text, index) => '<div class="file-source-line"><span class="file-line-number">' + (index+1) + '</span><code>' + (esc(text) || ' ') + '</code></div>').join('') + '</div>' + (patch.truncated || lines.length>shown.length ? empty('미리보기 한도: 최대 192 KiB · 3,000줄까지 표시합니다.') : '');
+    return heading + '<div class="patch full-file-preview">' + shown.map((text, index) => '<div class="file-source-line"><span class="file-line-number">' + (index+1) + '</span><code>' + (esc(text) || ' ') + '</code></div>').join('') + '</div>' + (patch.truncated || lines.length>shown.length ? empty(L('미리보기 한도: 최대 192 KiB · 3,000줄까지 표시합니다.')) : '');
   }
   const lines = patch.split("\n"), shown = lines.slice(0, 3000);
   return patch ? '<div class="patch">' + shown.map(l => {
       const cls = /^(diff |index |--- |\+\+\+ |new file|deleted file|old mode|new mode)/.test(l) ? "pmeta" : l.startsWith("@@") ? "hunk" : l.startsWith("+") ? "plus" : l.startsWith("-") ? "minus" : "";
       return '<div class="' + cls + '">' + (esc(l) || " ") + '</div>';
-    }).join("") + '</div>' + (lines.length > shown.length ? empty("처음 3,000줄까지 표시합니다.") : "") : empty("표시할 텍스트 변경이 없습니다.");
+    }).join("") + '</div>' + (lines.length > shown.length ? empty(L("처음 3,000줄까지 표시합니다.")) : "") : empty(L("표시할 텍스트 변경이 없습니다."));
 }
 async function expandDiff() {
   if (!selected || !previewRequest) return;
   const popup = $("#diff-popup"), request = previewRequest;
   $("#popup-file").textContent = selected.path;
-  $("#popup-patch").innerHTML = empty("비교 내용을 불러오는 중…");
+  $("#popup-patch").innerHTML = empty(L("비교 내용을 불러오는 중…"));
   popup.showModal();
   try {
     const patch = await request;
@@ -317,10 +319,10 @@ async function showDiff() {
     f = selected;
   if (!pane) return;
   if (!f) {
-    pane.innerHTML = empty("비교할 파일이 없습니다.");
+    pane.innerHTML = empty(L("비교할 파일이 없습니다."));
     return;
   }
-  pane.innerHTML = empty("비교 내용을 불러오는 중…");
+  pane.innerHTML = empty(L("비교 내용을 불러오는 중…"));
   try {
     previewRequest = api("diff", {
       rev,
@@ -332,7 +334,7 @@ async function showDiff() {
     const patch = await previewRequest;
     if (serial !== diffSeq || !pane.isConnected) return;
     pane.innerHTML = '<div class="subhead">' + icon("file") + '<span class="ellipsis" title="' + esc(f.path) + '">' + esc(f.path) +
-      '</span><button id="expand-diff">크게 보기</button>' + (mode === "work" && !(patch?.type === 'file' && (patch.message || patch.empty)) ? '<button id="partial">' + (f.code === "U" ? '충돌 해결' : '줄 선택') + '</button>' : '') +
+      L('</span><button id="expand-diff">크게 보기</button>') + (mode === "work" && !(patch?.type === 'file' && (patch.message || patch.empty)) ? '<button id="partial">' + (f.code === "U" ? L('충돌 해결') : L('줄 선택')) + '</button>' : '') +
       '</div>' + patchHtml(patch);
   } catch (e) {
     if (serial === diffSeq && pane.isConnected) pane.innerHTML = empty(e.message);
@@ -353,7 +355,7 @@ function workView() {
   }));
   fileList = [...indexed, ...work];
   selected = fileList.find(f => f.kind === selected?.kind && f.path === selected?.path) || fileList[0] || null;
-  $("#main").innerHTML = head("파일 상태") + (s.progress ? '<div class="compare-bar">' + esc(s.progress) + ' 진행 중 <button id="proceed">계속</button><button id="abort">중단</button></div>' : '') + '<div class="split work-split"><div class="files"></div>' + separator('files') + '<div class="diff"></div></div><div class="composer"><label>커밋 메시지<textarea id="message" placeholder="변경 내용을 입력하세요"></textarea></label>' + (s.head && !s.progress ? checkField("amend", "마지막 커밋 수정") : "") + '<button class="primary" id="do-commit">커밋</button></div>';
+  $("#main").innerHTML = head(L("파일 상태")) + (s.progress ? '<div class="compare-bar">' + esc(s.progress) + L(' 진행 중 <button id="proceed">계속</button><button id="abort">중단</button></div>') : '') + '<div class="split work-split"><div class="files"></div>' + separator('files') + L('<div class="diff"></div></div><div class="composer"><label>커밋 메시지<textarea id="message" placeholder="변경 내용을 입력하세요"></textarea></label>') + (s.head && !s.progress ? checkField("amend", L("마지막 커밋 수정")) : "") + L('<button class="primary" id="do-commit">커밋</button></div>');
   $("#message").value = drafts.get(repo) || "";
   enableCommit();
   paintFiles();
@@ -365,17 +367,20 @@ function enableCommit() {
 function recentList() {
   if (!recentRepos.length) return "";
   const buttons = recentRepos.map(path => '<div class="recent-item"><button type="button" data-recent="' + esc(path) +
-    '"><strong>' + esc(environmentRepoName(path)) + '</strong><small>' + esc(environmentRepoPath(path)) + '</small></button><button type="button" class="forget-repo" data-forget="' + esc(path) + '" aria-label="' + esc(environmentRepoName(path)) + ' 목록에서 제거" title="열린 탭과 최근 목록에서 제거합니다. 실제 폴더와 Git 파일은 유지합니다.">목록에서 제거</button></div>');
-  return '<section class="recent-repos"><h3>최근 저장소</h3><div>' + buttons.join("") + '</div></section>';
+    '"><strong>' + esc(environmentRepoName(path)) + '</strong><small>' + esc(environmentRepoPath(path)) + '</small></button><button type="button" class="forget-repo" data-forget="' + esc(path) + '" aria-label="' + esc(environmentRepoName(path)) + L(' 목록에서 제거" title="열린 탭과 최근 목록에서 제거합니다. 실제 폴더와 Git 파일은 유지합니다.">목록에서 제거</button></div>'));
+  return L('<section class="recent-repos"><h3>최근 저장소</h3><div>') + buttons.join("") + '</div></section>';
 }
 function repositoryUnavailable(path, error) {
-  dialog('저장소를 열 수 없습니다', info(environmentRepoPath(path)) + info(error.message) +
-    info('폴더를 삭제하거나 옮겼다면 목록에서 제거할 수 있습니다. 실제 폴더와 Git 파일은 삭제하지 않습니다.'), '목록에서 제거', () => forgetRepository(path));
+  dialog(L('저장소를 열 수 없습니다'), info(environmentRepoPath(path)) + info(error.message) +
+    info(L('폴더를 삭제하거나 옮겼다면 목록에서 제거할 수 있습니다. 실제 폴더와 Git 파일은 삭제하지 않습니다.')), L('목록에서 제거'), () => forgetRepository(path));
 }
 async function forgetRepository(path) {
   const workspace = await api('forget', {path});
   repos = workspace.repos; recentRepos = workspace.recent;
-  if (repo === path || !repos.includes(repo)) {
+  if (showingHome) {
+    if (repo === path || !repos.includes(repo)) {repo = ''; s = null; rev = '';}
+    render();
+  } else if (repo === path || !repos.includes(repo)) {
     if (workspace.active) await refresh(workspace.active);
     else {
       repo = ''; s = null; rev = ''; selected = null; fileList = [];
@@ -388,7 +393,12 @@ async function forgetRepository(path) {
     if (recentRepos.length) recent.outerHTML = recentList();
     else recent.remove();
   }
-  notice('저장소를 목록에서 제거했습니다. 실제 폴더는 유지됩니다.');
+  notice(L('저장소를 목록에서 제거했습니다. 실제 폴더는 유지됩니다.'));
+}
+async function showHome() {
+  await loadRecent();
+  showingHome = true;
+  render();
 }
 async function loadRecent() {
   recentRepos = await api("recent");
@@ -398,8 +408,8 @@ function render() {
   ++detailSeq;
   ++diffSeq;
   chrome();
-  if (!s) {
-    $("#main").innerHTML = '<div class="blank">' + icon("folder") + '<h2>로컬 저장소 열기</h2><p>Windows 또는 WSL2 환경을 선택하고 작업할 저장소를 여세요.</p><button class="primary" id="open-empty">저장소 열기</button>' + recentList() + '</div>';
+  if (showingHome || !s) {
+    $("#main").innerHTML = '<div class="blank">' + icon("folder") + L('<h2>로컬 저장소 열기</h2><p>Windows 또는 WSL2 환경을 선택하고 작업할 저장소를 여세요.</p><button class="primary" id="open-empty">저장소 열기</button>') + recentList() + '</div>';
     return;
   }
   if (mode === "work") workView();else historyView();
@@ -412,6 +422,7 @@ async function refresh(next = repo) {
   catch (error) { repositoryUnavailable(next, error); throw error; }
   repo = next;
   s = data;
+  showingHome = false;
   limit = n;
   if (changed) {
     compareBase = "";
@@ -462,30 +473,30 @@ async function mutation(op, more = {}) {
   }
   await refresh();
   notice({
-    stash: "변경을 스태시에 보관했습니다.",
-    apply_stash: "스태시를 적용했습니다.",
-    merge: "병합을 완료했습니다.",
-    commit: "커밋을 만들었습니다.",
-    fetch: "페치를 완료했습니다.",
-    pull: "풀을 완료했습니다.",
-    push: "푸시를 완료했습니다.",
-    branch: more.checkout === false ? "새 브랜치를 만들었습니다." : "새 브랜치로 전환했습니다.",
-    switch: "브랜치를 전환했습니다."
-  }[op] || (["stage", "unstage"].includes(op) ? "스테이징 상태를 변경했습니다." : "작업을 완료했습니다."));
+    stash: L("변경을 스태시에 보관했습니다."),
+    apply_stash: L("스태시를 적용했습니다."),
+    merge: L("병합을 완료했습니다."),
+    commit: L("커밋을 만들었습니다."),
+    fetch: L("페치를 완료했습니다."),
+    pull: L("풀을 완료했습니다."),
+    push: L("푸시를 완료했습니다."),
+    branch: more.checkout === false ? L("새 브랜치를 만들었습니다.") : L("새 브랜치로 전환했습니다."),
+    switch: L("브랜치를 전환했습니다.")
+  }[op] || (["stage", "unstage"].includes(op) ? L("스테이징 상태를 변경했습니다.") : L("작업을 완료했습니다.")));
 }
 async function openDesktop(op, path = repo) {
-  notice(op === 'terminal' ? '터미널 창을 여는 중…' : '탐색기 창을 여는 중…', true);
+  notice(op === 'terminal' ? L('터미널 창을 여는 중…') : L('탐색기 창을 여는 중…'), true);
   const result = await api('action', {repo: path, op});
-  notice(result?.message || '열기를 요청했습니다. 작업 표시줄을 확인하세요.');
+  notice(translatedMessage(result?.message) || L('열기를 요청했습니다. 작업 표시줄을 확인하세요.'));
 }
 function remoteAction(op) {
   if (op === "fetch") return fetchDialog();
-  if (!s.branch) return notice("로컬 브랜치를 먼저 체크아웃하세요.", true);
+  if (!s.branch) return notice(L("로컬 브랜치를 먼저 체크아웃하세요."), true);
   const local = s.refs.find(r => r.group === "heads" && r.name === s.branch);
   const isPull = op === "pull",
-    label = isPull ? "풀" : "푸시";
+    label = isPull ? L("풀") : L("푸시");
   const remote = local?.remote || (s.remotes.includes("origin") ? "origin" : s.remotes[0]);
-  dialog(label, selectField("sync-remote", "원격 저장소", s.remotes, remote) + textField("sync-target", "원격 브랜치", local?.target || s.branch) + (isPull ? selectField("sync-strategy", "통합 방식", [["ff", "Fast-forward만 허용"], ["merge", "병합"], ["rebase", "리베이스"]]) : info("로컬 " + s.branch + "의 커밋을 푸시하고 업스트림을 설정합니다.")), label, () => mutation(op, {
+  dialog(label, selectField("sync-remote", L("원격 저장소"), s.remotes, remote) + textField("sync-target", L("원격 브랜치"), local?.target || s.branch) + (isPull ? selectField("sync-strategy", L("통합 방식"), [["ff", L("Fast-forward만 허용")], ["merge", L("병합")], ["rebase", L("리베이스")]]) : info(T('로컬 {branch}의 커밋을 푸시하고 업스트림을 설정합니다.', {branch: s.branch}))), label, () => mutation(op, {
     remote: valueOf("sync-remote"),
     target: valueOf("sync-target"),
     strategy: isPull ? valueOf("sync-strategy") : undefined
@@ -506,7 +517,7 @@ let referenceReveal = 0;
 async function revealReference(reference) {
   const serial = ++referenceReveal, expectedRepo = repo, original = s;
   if (!s.commits.some(commit => commit.id === reference.id)) {
-    notice(reference.name + '의 커밋 위치를 찾는 중…');
+    notice(reference.name + L('의 커밋 위치를 찾는 중…'));
     const located = await api('locate-commit', {rev: reference.id, count: limit});
     const data = await api('state', {count: located.count});
     if (serial !== referenceReveal || repo !== expectedRepo || s !== original) return;
@@ -525,6 +536,7 @@ function clickAction(e) {
   const el = e.target.closest("button");
   if (!el || busy) return;
   const d = el.dataset;
+  if (el.id === "home-open") return exclusive(showHome);
   if (d.forget !== undefined) return exclusive(() => forgetRepository(d.forget));
   if (["add", "open-empty"].includes(el.id)) return exclusive(async () => {
     await loadRecent();
@@ -543,6 +555,10 @@ function clickAction(e) {
     repos = await api("close", {
       repo: closed
     });
+    if (showingHome) {
+      if (closed === repo) {repo = ''; s = null; rev = '';}
+      await loadRecent(); render(); return;
+    }
     if (closed === repo && repos.length) await refresh(repos[Math.min(Number(d.close), repos.length - 1)]);else if (!repos.length) {
       repo = "";
       s = null;
@@ -566,10 +582,10 @@ function clickAction(e) {
     historyView();
     return;
   }
-  if (el.id === "cherry") return dialog("체리픽", info(rev.slice(0, 10) + " 커밋을 현재 HEAD에 적용합니다. 병합 커밋은 첫 부모 기준입니다."), "적용", () => mutation("cherry_pick", {
+  if (el.id === "cherry") return dialog(L("체리픽"), info(rev.slice(0, 10) + L(" 커밋을 현재 HEAD에 적용합니다. 병합 커밋은 첫 부모 기준입니다.")), L("적용"), () => mutation("cherry_pick", {
     rev
   }));
-  if (["proceed", "abort"].includes(el.id)) return dialog(s.progress, info("진행 중인 " + s.progress + " 작업을 " + (el.id === "abort" ? "중단" : "계속") + "합니다."), "확인", () => mutation(el.id === "abort" ? "abort" : "continue"));
+  if (["proceed", "abort"].includes(el.id)) return dialog(s.progress, info(T('진행 중인 {operation} 작업을 {action}합니다.', {operation: s.progress, action: el.id === 'abort' ? L('중단') : L('계속')})), L("확인"), () => mutation(el.id === "abort" ? "abort" : "continue"));
   if (d.tool === "tag") return tagDialog();
   if (d.tool === "flow") return flowDialog();
   if (d.tool === "remote") return exclusive(openRemoteWebsite);
@@ -595,11 +611,11 @@ function clickAction(e) {
   if (d.tool === "branch") return branchDialog();
   if (d.tool === "merge") {
     const opts = s.refs.filter(r => r.group === "heads" && r.name !== s.branch).map(r => '<option>' + esc(r.name) + '</option>').join("");
-    return dialog("브랜치 병합", '<p>선택한 브랜치를 현재 브랜치 ' + esc(s.branch) + '에 병합합니다.</p><label>병합할 브랜치<select id="answer">' + opts + '</select></label>', "병합", name => mutation("merge", {
+    return dialog(L("브랜치 병합"), info(T('선택한 브랜치를 현재 브랜치 {branch}에 병합합니다.', {branch: s.branch})) + L('<label>병합할 브랜치<select id="answer">') + opts + '</select></label>', L("병합"), name => mutation("merge", {
       name
     }));
   }
-  if (d.tool === "stash") return dialog("변경 사항 스태시", '<p>스테이징된 변경, 작업 트리 변경, 새 파일을 함께 보관합니다.</p><label>설명 (선택)<input class="form-input" id="answer"></label>', "보관", message => mutation("stash", {
+  if (d.tool === "stash") return dialog(L("변경 사항 스태시"), L('<p>스테이징된 변경, 작업 트리 변경, 새 파일을 함께 보관합니다.</p><label>설명 (선택)<input class="form-input" id="answer"></label>'), L("보관"), message => mutation("stash", {
     message
   }));
   if (d.stash !== undefined) return stashDialog(Number(d.stash));
@@ -649,7 +665,7 @@ function clickAction(e) {
       paths: rows.map(r => r.path)
     }));
   }
-  if (el.id === "do-commit" && $("#amend")?.checked) return dialog("마지막 커밋 수정", info("현재 HEAD 커밋을 새 메시지와 인덱스 내용으로 교체합니다."), "수정", () => mutation("commit", {
+  if (el.id === "do-commit" && $("#amend")?.checked) return dialog(L("마지막 커밋 수정"), info(L("현재 HEAD 커밋을 새 메시지와 인덱스 내용으로 교체합니다.")), L("수정"), () => mutation("commit", {
     amend: true,
     message: $("#message").value
   }));
@@ -692,6 +708,7 @@ $("#form").onsubmit = e => {
   exclusive(() => actionPending(value));
 };
 exclusive(async () => {
+  await initializeLanguage();
   const workspace = await api("workspace");
   const resume = await api('app-update', {action: 'restore'});
   for (const [path, message] of resume.drafts || []) if (typeof path === 'string' && typeof message === 'string') drafts.set(path, message);
@@ -700,5 +717,6 @@ exclusive(async () => {
   if (repos.length) {
     await refresh(repos.includes(resume.repo) ? resume.repo : workspace.active || repos[0]);
     if (resume.mode === 'work') switchMode('work');
+    if (resume.home) await showHome();
   } else render();
 });

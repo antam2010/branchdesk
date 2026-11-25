@@ -19,11 +19,12 @@ import workspace_ops
 import commit_ops
 import updater
 import environments
+from language import LanguageStore
 from tab_store import TabStore
 
 WEB = Path(__file__).resolve().parent / "web"
 ASSETS = {"/panes.js": "panes.js", "/": "index.html", "/app.js": "app.js", "/commands.js": "commands.js", "/style.css": "style.css",
-          "/icon.png": "icon.png", "/favicon.ico": "favicon.ico", "/context.js": "context.js", "/update.js": "update.js", "/environments.js": "environments.js"}
+          "/icon.png": "icon.png", "/favicon.ico": "favicon.ico", "/context.js": "context.js", "/update.js": "update.js", "/environments.js": "environments.js", "/i18n.js": "i18n.js", "/i18n.json": "i18n.json"}
 
 
 class Desk(ThreadingHTTPServer):
@@ -47,6 +48,7 @@ class Desk(ThreadingHTTPServer):
                 if windows_root: resume_path = Path(updater.wsl_path(windows_root)) / 'resume-ui.json'
             except (ValueError, OSError, subprocess.SubprocessError): pass
         self.updater = updater.Updater(launcher, resume_path=resume_path)
+        self.language = LanguageStore(resume_path.parent if resume_path else None)
         try:
             paths, active, self.recent = self.tabs.read()
         except OSError:
@@ -131,7 +133,7 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def reply(self, status, body, mime="application/json"):
-        if mime == "application/json":
+        if mime == "application/json" and not isinstance(body, (bytes, bytearray)):
             body = json.dumps(body, ensure_ascii=True).encode()
         self.send_response(status)
         self.send_header("Content-Type", mime + ("; charset=utf-8" if mime.startswith("text/") or mime in ("application/json", "application/javascript") else ""))
@@ -167,7 +169,12 @@ class Handler(BaseHTTPRequestHandler):
             d = json.loads(self.rfile.read(size))
             if not isinstance(d, dict):
                 raise ValueError("잘못된 요청입니다.")
-            if self.path == "/api/app-update":
+            if self.path == "/api/language":
+                action = d.get('action', 'read')
+                if action == 'save': value = {'language': self.server.language.save(d.get('language'))}
+                elif action == 'read': value = {'language': self.server.language.read()}
+                else: raise ValueError('언어 설정 작업을 확인하세요.')
+            elif self.path == "/api/app-update":
                 action = d.get('action', 'status')
                 app = self.server.updater
                 if action == 'check': value = app.check()
@@ -185,7 +192,7 @@ class Handler(BaseHTTPRequestHandler):
                             raise ValueError('작성 중인 메시지를 확인한 뒤 다시 적용하세요.')
                         drafts.append([path, message])
                     resume = dict(drafts=drafts, repo=ui.get('repo') if ui.get('repo') in self.server.repos else self.server.active,
-                                  mode='work' if ui.get('mode') == 'work' else 'history')
+                                  mode='work' if ui.get('mode') == 'work' else 'history', home=ui.get('home') is True)
                     value = app.apply(d.get('ticket'), environments.export_ui(resume))
                 elif action == 'restart': value = app.restart(d.get('ticket'))
                 elif action == 'restore': value = environments.restore_ui(updater.restore_ui_state(app.resume_path))

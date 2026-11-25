@@ -1,5 +1,7 @@
 param([Parameter(Mandatory=$true)][string]$RequestFile)
 $ErrorActionPreference = 'Stop'
+# EMBED_I18N
+if (!(Get-Command T -CommandType Function -ErrorAction SilentlyContinue)) { . (Join-Path $PSScriptRoot 'i18n.ps1') }
 $request = $null
 $parent = $null
 $previous = $null
@@ -7,10 +9,10 @@ $pointer = $null
 $changed = $false
 try {
     $request = Get-Content -LiteralPath $RequestFile -Raw -Encoding UTF8 | ConvertFrom-Json
-    if ($request.sha256 -notmatch '^[0-9a-f]{64}$') { throw '업데이트 파일 정보가 올바르지 않습니다.' }
+    if ($request.sha256 -notmatch '^[0-9a-f]{64}$') { throw (T '업데이트 파일 정보가 올바르지 않습니다.') }
     $parent = Get-Process -Id ([int]$request.parentPid)
-    if (![string]::Equals($parent.Path, $request.launcher, [StringComparison]::OrdinalIgnoreCase)) { throw '실행 중인 앱을 확인하지 못했습니다.' }
-    if ((Get-FileHash -LiteralPath $request.source -Algorithm SHA256).Hash.ToLowerInvariant() -ne $request.sha256) { throw '업데이트 파일 검증에 실패했습니다.' }
+    if (![string]::Equals($parent.Path, $request.launcher, [StringComparison]::OrdinalIgnoreCase)) { throw (T '실행 중인 앱을 확인하지 못했습니다.') }
+    if ((Get-FileHash -LiteralPath $request.source -Algorithm SHA256).Hash.ToLowerInvariant() -ne $request.sha256) { throw (T '업데이트 파일 검증에 실패했습니다.') }
     $root = Join-Path $env:LOCALAPPDATA 'Branchdesk'
     $directory = Join-Path (Join-Path $root 'versions') $request.sha256
     [void](New-Item -ItemType Directory -Path $directory -Force)
@@ -19,7 +21,7 @@ try {
         Move-Item -LiteralPath $candidate -Destination ($candidate + '.bad-' + [Guid]::NewGuid().ToString())
     }
     if (!(Test-Path -LiteralPath $candidate)) { [IO.File]::Copy($request.source, $candidate, $false) }
-    if ((Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash.ToLowerInvariant() -ne $request.sha256) { throw '저장된 업데이트 파일 검증에 실패했습니다.' }
+    if ((Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash.ToLowerInvariant() -ne $request.sha256) { throw (T '저장된 업데이트 파일 검증에 실패했습니다.') }
     $pointer = Join-Path $root 'current.json'
     $launchers = @()
     if (Test-Path -LiteralPath $pointer) {
@@ -32,8 +34,8 @@ try {
     [IO.File]::WriteAllText($request.signal + '.helper', 'ready')
     $deadline = (Get-Date).AddMinutes(2)
     while (!$parent.WaitForExit(200)) {
-        if (Test-Path -LiteralPath ($request.signal + '.cancel')) { throw '업데이트 적용이 취소되었습니다.' }
-        if ((Get-Date) -gt $deadline) { throw '현재 앱이 종료되지 않아 업데이트를 적용하지 않았습니다.' }
+        if (Test-Path -LiteralPath ($request.signal + '.cancel')) { throw (T '업데이트 적용이 취소되었습니다.') }
+        if ((Get-Date) -gt $deadline) { throw (T '현재 앱이 종료되지 않아 업데이트를 적용하지 않았습니다.') }
     }
     $newPointer = @{sha256=$request.sha256; launchers=$launchers} | ConvertTo-Json -Compress
     $tempPointer = Join-Path $root ([Guid]::NewGuid().ToString() + '.tmp')
@@ -55,7 +57,7 @@ try {
     }
     if ($parent -and $parent.HasExited) {
         Add-Type -AssemblyName System.Windows.Forms
-        [void][System.Windows.Forms.MessageBox]::Show($message, 'Branchdesk 업데이트', 'OK', 'Error')
+        [void][System.Windows.Forms.MessageBox]::Show($message, (T 'Branchdesk 업데이트'), 'OK', 'Error')
     }
 } finally {
     if ($parent) { $parent.Dispose() }

@@ -7,6 +7,7 @@
 #include <shellapi.h>
 #include "payload.h"
 #include "setup.h"
+#include "i18n.h"
 
 static HICON app_icon_big=NULL, app_icon_small=NULL;
 static WCHAR launcher_path[MAX_PATH]={0}, update_signal[MAX_PATH]={0};
@@ -29,8 +30,23 @@ static BOOL append(WCHAR *dst, DWORD cap, const WCHAR *src) {
     CopyMemory(dst+used, src, (n+1)*sizeof(WCHAR));
     return TRUE;
 }
+static int native_language=0;
+static void load_native_language(void) {
+    WCHAR path[MAX_PATH]; char code[2]; DWORD got=0;
+    DWORD n=GetEnvironmentVariableW(L"LOCALAPPDATA",path,MAX_PATH);
+    if(!n || n>=MAX_PATH || !append(path,MAX_PATH,L"\\Branchdesk\\language.txt")) return;
+    HANDLE file=CreateFileW(path,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
+    if(file==INVALID_HANDLE_VALUE) return;
+    if(ReadFile(file,code,2,&got,NULL) && got==2) native_language=code[0]=='e'&&code[1]=='n'?1:code[0]=='j'&&code[1]=='a'?2:0;
+    CloseHandle(file);
+}
+static const WCHAR *native_text(const WCHAR *text) {
+    if(native_language) for(unsigned i=0;i<sizeof(native_messages)/sizeof(native_messages[0]);i++)
+        if(!lstrcmpW(text,native_messages[i][0])) return native_messages[i][native_language];
+    return text;
+}
 static void alert(const WCHAR *msg) {
-    MessageBoxW(NULL, msg, L"Branchdesk", MB_OK | MB_ICONERROR);
+    MessageBoxW(NULL, native_text(msg), L"Branchdesk", MB_OK | MB_ICONERROR);
 }
 static void close_handle(HANDLE *h) {
     if (*h) { CloseHandle(*h); *h=NULL; }
@@ -272,6 +288,7 @@ static DWORD wait_window(HANDLE backend, PROCESS_INFORMATION *edge) {
 }
 int WINAPI wWinMain(HINSTANCE instance,HINSTANCE prev,LPWSTR args,int show) {
     (void)prev; (void)args; (void)show;
+    load_native_language();
     SetProcessDpiAwarenessContext((HANDLE)(LONG_PTR)-4);
     WCHAR edge[MAX_PATH], wsl[MAX_PATH], cmd[2048]={0}, url[128], profile[MAX_PATH+1]={0};
     HANDLE child_in=NULL, input=NULL, output=NULL, child_out=NULL, writer=NULL;

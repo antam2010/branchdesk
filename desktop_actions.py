@@ -20,6 +20,8 @@ def open_windows(action, root=None, url=None):
         folder = Path(directory)
         script = folder/'desktop.ps1'
         script.write_bytes(b'\xef\xbb\xbf' + (Path(__file__).parent/'windows/desktop.ps1').read_bytes())
+        from language import copy_windows_translations
+        copy_windows_translations(folder)
         source = folder/'request.json'; result = folder/'result.json'
         source.write_text(json.dumps(request, ensure_ascii=True), encoding='utf-8')
         code, out, err = run([powershell, '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',

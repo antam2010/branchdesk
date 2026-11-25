@@ -1,6 +1,8 @@
 """Build the Windows executable with MSVC (x64 developer prompt) or MinGW-w64."""
 import io
 import base64
+import json
+import re
 import os
 import shlex
 import shutil
@@ -12,7 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 FILES = ["branchdesk.py", "tab_store.py", "gitdesk.py", "web/app.js", "web/panes.js", "web/index.html",
-         "web/style.css", "web/icon.png", "web/favicon.ico", "workspace_ops.py", "commit_ops.py", "partial.py", "web/commands.js", "web/context.js", "web/update.js", "updater.py", "windows/update.ps1", "windows/session.py", "environments.py", "process_utils.py", "web/environments.js", "windows/tools.ps1", "desktop_actions.py", "windows/desktop.ps1"]
+         "web/style.css", "web/icon.png", "web/favicon.ico", "workspace_ops.py", "commit_ops.py", "partial.py", "web/commands.js", "web/context.js", "web/update.js", "updater.py", "windows/update.ps1", "windows/session.py", "environments.py", "process_utils.py", "web/environments.js", "windows/tools.ps1", "desktop_actions.py", "windows/desktop.ps1", "language.py", "web/i18n.js", "web/i18n.json", "windows/i18n.ps1"]
 
 
 def payload():
@@ -35,7 +37,23 @@ def header(directory):
     source = (ROOT / "windows/setup.ps1").read_text(encoding="utf-8-sig").replace("\r\n", "\n")
     embedded = base64.b64encode((ROOT / "windows/tools.ps1").read_bytes()).decode('ascii')
     source = source.replace('# EMBED_TOOLS', "$ToolsScript = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" + embedded + "'))")
+    catalog_text = (ROOT / 'web/i18n.json').read_text(encoding='utf-8')
+    loader = (ROOT / 'windows/i18n.ps1').read_text(encoding='utf-8')
+    full_catalog = json.loads(catalog_text)
+    native_keys = set()
+    for script_name in ('setup.ps1', 'tools.ps1'):
+        for match in re.finditer(r"T '((?:''|[^'])*)'", (ROOT/'windows'/script_name).read_text(encoding='utf-8')):
+            native_keys.add(match[1].replace("''", "'").strip())
+    native_catalog = json.dumps({lang: {key: value for key, value in entries.items() if key in native_keys} for lang, entries in full_catalog.items()}, ensure_ascii=False, separators=(',', ':'))
+    bootstrap = "$BranchdeskCatalogJson = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" + base64.b64encode(native_catalog.encode()).decode() + "'))\n" + loader + "\n"
+    embedded_bootstrap = base64.b64encode(bootstrap.encode()).decode()
+    source = source.replace('# EMBED_I18N', "$I18nBootstrap = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" + embedded_bootstrap + "'))\n" + bootstrap, 1)
     setup = b"\xef\xbb\xbf" + source.encode('utf-8')
+    catalog = json.loads(catalog_text)
+    messages = [json.loads('"'+raw+'"') for raw in re.findall(r'L"((?:\\.|[^"\\])*)"', (ROOT/'windows/launcher.c').read_text()) if re.search('[가-힣]', raw)]
+    quote = lambda value: 'L' + json.dumps(value, ensure_ascii=False)
+    entries = ["{" + ','.join(quote(value) for value in (key, catalog['en'].get(key,key), catalog['ja'].get(key,key))) + "}" for key in dict.fromkeys(messages)]
+    (directory/'i18n.h').write_text('static const WCHAR *const native_messages[][3] = {\n'+',\n'.join(entries)+'\n};\n', encoding='utf-8')
     lines = [", ".join(str(b) for b in setup[n:n+20]) for n in range(0, len(setup), 20)]
     (directory / "setup.h").write_text(
         "static const unsigned char setup_script[] = {\n" + ",\n".join(lines) + "\n};\n", encoding="ascii")

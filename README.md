@@ -2,7 +2,7 @@
 
 **English** · [한국어](README.ko.md) · [日本語](README.ja.md)
 
-A local Git GUI for Windows and WSL. Manage Windows repositories with Windows Git and WSL repositories with the selected distribution's Git in the same application. The application interface is currently Korean. Feature names and instructions in this guide are translated into English.
+A local Git GUI for Windows and WSL. Manage Windows repositories with Windows Git and WSL repositories with the selected distribution's Git in the same application. The interface supports English, Korean, and Japanese. Choose a language from the selector at the top right; your selection is restored after restarting or updating the app. Repository names, paths, branches, commit messages, and Git output remain unchanged.
 
 ## Start on Windows
 
@@ -12,7 +12,7 @@ Double-click `Branchdesk.exe` on Windows 11 x64. The executable contains the app
 | --- | --- |
 | An existing, working WSL distribution | Continue with the default WSL environment |
 | Windows without WSL | Select Windows Python and Git executables in the startup helper |
-| Windows Python or Git is missing | Use **Install in the app tools folder** |
+| Windows Python or Git is missing | Use **Install in app tools folder** |
 | You prefer WSL | Select **Use WSL** and follow the Ubuntu/Debian setup helper |
 
 The default Windows tools directory is `%LOCALAPPDATA%\Branchdesk\tools`: Python at `python\python.exe`, Git at `git\cmd\git.exe`. Windows installations use WinGet and its package-manifest hash verification. WinGet comes with Microsoft's **App Installer**. If a package is already installed elsewhere, connect its existing executable instead of expecting WinGet to duplicate it in a new directory.
@@ -21,11 +21,11 @@ Automatic WSL package installation supports Ubuntu/Debian. Initial WSL installat
 
 ### Connect Windows and WSL2 environments
 
-1. Open **Execution environments**.
+1. Open **Environments**.
 2. Click **＋ Add environment**.
 3. Choose **Windows** or **WSL2**. Enter a name and, optionally, a WSL distribution name.
-4. Click **Connect environment**. The app discovers Python/Git and checks their versions.
-5. Use **Set executable paths** if discovery fails or you need a specific installation.
+4. Click **Connect this environment**. The app discovers Python/Git and checks their versions.
+5. Use **Set executable paths (optional)** if discovery fails or you need a specific installation.
 
 The list shows the actual platform and distribution rather than an ambiguous “current OS.” Native Linux source launches also offer a Linux environment. Existing profile IDs and repository connections are preserved.
 
@@ -38,7 +38,7 @@ In **Open repository**, choose an environment and enter its native path:
 
 The add-environment button in the repository dialog lets you add a missing environment and return without losing the clone URL or folder you typed. Each repository tab remembers its environment. Git/Python paths are app settings; selecting them does not change global Git settings or the system PATH. Installers may register their own PATH entries when you explicitly install tools.
 
-Expand **Install missing Git/Python** to install missing tools. Windows accepts a user directory; WSL uses the selected distribution's package manager. After installation, connect or save the environment.
+Expand **Need Git or Python? Install programs** to install missing tools. Windows accepts a user directory; WSL uses the selected distribution's package manager. After installation, connect or save the environment.
 
 **App startup settings (advanced)** changes the Python environment that starts the EXE on its next launch. This is separate from each repository's Git environment and normally needs no change. Switching the host OS merges profile and tab references into the destination state directory; repository and private-key files are not copied. App startup uses Windows or the default WSL distribution; other distributions remain available for repository work.
 
@@ -52,6 +52,10 @@ New Ed25519 keys are created in `~/.ssh/branchdesk-NAME/id_ed25519`. Existing di
 
 Authentication checks support GitHub, GitLab.com, and Bitbucket. Unknown host keys are not automatically accepted. Run the appropriate `ssh -T git@HOST` command in the selected environment, verify the service's published host fingerprint, and register your public key yourself. Use a terminal for private servers or custom connection details.
 
+## Home and recent repositories
+
+Click **Home** at the left of the tab bar to see saved repository paths, even while other repositories are open. Click a recent entry to open or reactivate it. Existing tabs and commit-message drafts remain available. Repository actions are disabled on Home until you open a repository. Home also provides the open-repository button and list-removal actions.
+
 ## Remove a repository from the list
 
 Use **Remove from list** beside a recent repository or in the repository tab menu. This removes its open tab and recent-path records; it does not delete the folder or Git files. A failed-open dialog also offers removal when a folder has been deleted or moved, or its environment cannot be reached. Removing a saved entry does not require connecting to that environment.
@@ -63,7 +67,7 @@ Use **Remove from list** beside a recent repository or in the repository tab men
 | Repository tabs | Open, clone, or initialize repositories; restore tab order and the active tab on restart; reopen recent repositories |
 | Single-click a branch | Select its commit and scroll the graph there, without checking it out; load more history if needed, within the 5,000-commit limit |
 | Double-click a local branch | Open **Confirm branch change** before checkout |
-| Clean checkout | Off by default. Explicitly selecting **Discard local changes** discards the listed modifications, staged changes, and new files. Ignored files and nested Git repositories remain. A changed confirmation snapshot is rejected |
+| Clean checkout | Off by default. Explicitly selecting **Clean checkout (discard modified, staged, and new files)** discards the listed modifications, staged changes, and new files. Ignored files and nested Git repositories remain. A changed confirmation snapshot is rejected |
 | File status and commits | Stage or unstage whole files or selected text changes; commit or amend the latest commit |
 | New files | Show the complete selected text version with line numbers, even without an old file to compare. Index previews read staged content; commit previews read that commit. Empty files, binary content, and limits get explicit messages |
 | History and comparison | Inspect commits, compare two selected commits, and view files as a list or folder tree. Double-click a file to expand its preview |
@@ -130,6 +134,7 @@ Output: `dist/Branchdesk.exe`. On Linux with MinGW-w64 GCC and windres installed
 | --- | --- |
 | Windows profiles/tabs | `%LOCALAPPDATA%\Branchdesk\state` |
 | WSL/Linux profiles/tabs | `~/.local/state/branchdesk`, or the `XDG_STATE_HOME` equivalent |
+| Desktop language selection | `%LOCALAPPDATA%\Branchdesk\language.txt` (source mode: the user state folder) |
 | Window position/size/maximized state | `%LOCALAPPDATA%\Branchdesk\window.bin` |
 | EXE versions and update pointer | `%LOCALAPPDATA%\Branchdesk\versions` and `current.json` |
 | Desktop update resume data | `%LOCALAPPDATA%\Branchdesk\resume-ui.json` |
@@ -145,7 +150,7 @@ python3 tests/browser_smoke.py
 BRANCHDESK_EXE=./Branchdesk.exe python3 tests/browser_smoke.py
 ```
 
-Tests use temporary repositories and local bare remotes. They cover Git workflows, profile/worker transport, SSH key safety, selected-version file previews, branch cleanup safeguards and graph lookup, remote URL conversion, and updater error paths. Browser tests exercise menus, file previews, branch click/double-click behavior, remote choice, open-window messages, and updates; actual Windows process launching is mocked on Linux.
+Tests use temporary repositories and local bare remotes. They cover Git workflows, profile/worker transport, SSH key safety, selected-version file previews, branch cleanup safeguards and graph lookup, remote URL conversion, and updater error paths. Browser tests also check all three interface languages, persistence, untranslated user data, draft preservation, and Home navigation. They exercise menus, file previews, branch click/double-click behavior, remote choice, open-window messages, and updates; actual Windows process launching is mocked on Linux.
 
 In a prepared Windows 11 desktop session:
 

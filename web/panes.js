@@ -1,5 +1,5 @@
 // Separators resize their two adjacent panes without intercepting wheel scrolling.
-const paneLabels = {nav: '사이드바 너비', history: '커밋 그래프 높이', files: '변경 파일 영역 크기'};
+const paneLabels = {nav: L('사이드바 너비'), history: L('커밋 그래프 높이'), files: L('변경 파일 영역 크기')};
 const narrowPanes = matchMedia('(max-width: 680px)');
 function verticalSplit(name) {
   return name === 'history' || (name === 'files' && narrowPanes.matches);
@@ -7,7 +7,7 @@ function verticalSplit(name) {
 function separator(name) {
   const orientation = verticalSplit(name) ? 'horizontal' : 'vertical';
   return '<div class="pane-divider" data-pane="' + name + '" role="separator" tabindex="0" aria-label="' +
-    paneLabels[name] + '" aria-orientation="' + orientation + '"></div>';
+    L(paneLabels[name]) + '" aria-orientation="' + orientation + '"></div>';
 }
 function paneMetrics(divider) {
   const first = divider.previousElementSibling.getBoundingClientRect();

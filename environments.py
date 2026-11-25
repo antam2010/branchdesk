@@ -18,7 +18,7 @@ import uuid
 import zipfile
 
 execution_settings = ContextVar('execution_settings', default={})
-SOURCES = ('gitdesk.py', 'partial.py', 'workspace_ops.py', 'commit_ops.py', 'environments.py', 'process_utils.py', 'desktop_actions.py', 'updater.py', 'windows/desktop.ps1')
+SOURCES = ('gitdesk.py', 'partial.py', 'workspace_ops.py', 'commit_ops.py', 'environments.py', 'process_utils.py', 'desktop_actions.py', 'updater.py', 'language.py', 'web/i18n.json', 'windows/i18n.ps1', 'windows/desktop.ps1')
 
 
 def state_root():
@@ -423,6 +423,8 @@ class Environments:
             try:
                 script = folder/'tools.ps1'
                 script.write_bytes(b'\xef\xbb\xbf' + (Path(__file__).parent/'windows/tools.ps1').read_bytes())
+                from language import copy_windows_translations
+                copy_windows_translations(folder)
                 from updater import wsl_path
                 target = wsl_path(str(script), windows=True)
                 # Start a visible helper, keep this app usable while package managers run.

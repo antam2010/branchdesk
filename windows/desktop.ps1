@@ -1,5 +1,7 @@
 param([Parameter(Mandatory=$true)][string]$RequestFile, [Parameter(Mandatory=$true)][string]$ResultFile)
 $ErrorActionPreference = 'Stop'
+# EMBED_I18N
+if (!(Get-Command T -CommandType Function -ErrorAction SilentlyContinue)) { . (Join-Path $PSScriptRoot 'i18n.ps1') }
 Add-Type -TypeDefinition @'
 using System;
 using System.Text;
@@ -58,7 +60,7 @@ try {
     $request = Get-Content -LiteralPath $RequestFile -Raw -Encoding UTF8 | ConvertFrom-Json
     $focused = $false; $window = 0
     if ($request.action -eq 'explorer') {
-        if (!(Test-Path -LiteralPath $request.path -PathType Container)) { throw '탐색기로 열 폴더를 찾지 못했습니다.' }
+        if (!(Test-Path -LiteralPath $request.path -PathType Container)) { throw (T '탐색기로 열 폴더를 찾지 못했습니다.') }
         $shell = New-Object -ComObject Shell.Application
         $window = Explorer-Window $shell $request.path
         if (!$window) {
@@ -67,7 +69,7 @@ try {
             do { Start-Sleep -Milliseconds 120; $window = Explorer-Window $shell $request.path } while (!$window -and (Get-Date) -lt $deadline)
         }
         if ($window) { $focused = [BranchdeskWindows]::Focus($window) }
-        $message = if ($focused) {'저장소 폴더를 탐색기 앞쪽에 열었습니다.'} else {'탐색기를 열었습니다. 작업 표시줄에서 탐색기 창을 확인하세요.'}
+        $message = if ($focused) {(T '저장소 폴더를 탐색기 앞쪽에 열었습니다.')} else {(T '탐색기를 열었습니다. 작업 표시줄에서 탐색기 창을 확인하세요.')}
     } elseif ($request.action -eq 'terminal') {
         $encodedData = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($request|ConvertTo-Json -Compress)))
         $code = '$d=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('''+$encodedData+'''))|ConvertFrom-Json;'
@@ -94,13 +96,13 @@ try {
         } while (!$window -and (Get-Date) -lt $deadline)
         if ($window) { $focused = [BranchdeskWindows]::Focus([long]$window) }
         $process.Dispose()
-        $message = if ($focused) {'터미널을 화면 앞쪽에 열었습니다.'} else {'터미널을 열었습니다. 작업 표시줄에서 새 터미널 창을 확인하세요.'}
+        $message = if ($focused) {(T '터미널을 화면 앞쪽에 열었습니다.')} else {(T '터미널을 열었습니다. 작업 표시줄에서 새 터미널 창을 확인하세요.')}
     } elseif ($request.action -eq 'web') {
         $uri = [Uri]$request.url
-        if ($uri.Scheme -notin @('http','https') -or $uri.UserInfo) { throw '웹 저장소 주소를 확인하세요.' }
+        if ($uri.Scheme -notin @('http','https') -or $uri.UserInfo) { throw (T '웹 저장소 주소를 확인하세요.') }
         Start-Process -FilePath $uri.AbsoluteUri
-        $message = '기본 브라우저로 원격 저장소 웹페이지를 열었습니다.'
-    } else { throw '열기 작업을 확인하세요.' }
+        $message = (T '기본 브라우저로 원격 저장소 웹페이지를 열었습니다.')
+    } else { throw (T '열기 작업을 확인하세요.') }
     Write-Result @{opened=$true;foreground=$focused;message=$message}
     exit 0
 } catch { Write-Result @{error=$_.Exception.Message}; exit 1 }

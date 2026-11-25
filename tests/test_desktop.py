@@ -75,6 +75,23 @@ class DesktopTests(unittest.TestCase):
                 self.assertEqual(status, 200)
                 self.assertEqual(body, (ROOT / "web" / name).read_bytes())
 
+    def test_language_preference_survives_desktop_restarts(self):
+        def language(url, **data):
+            address = urlsplit(url)
+            connection = http.client.HTTPConnection(address.hostname,address.port,timeout=10)
+            try:
+                connection.request('POST','/api/language',json.dumps(data),{'X-Desk-Key':address.fragment})
+                response=connection.getresponse()
+                self.assertEqual(response.status,200)
+                return json.loads(response.read())['value']['language']
+            finally: connection.close()
+        with tempfile.TemporaryDirectory() as directory:
+            with desktop(ROOT/'Branchdesk.exe',directory) as first:
+                self.assertEqual(language(first),'ko')
+                self.assertEqual(language(first,action='save',language='ja'),'ja')
+            with desktop(ROOT/'Branchdesk.exe',directory) as second:
+                self.assertEqual(language(second),'ja')
+
     def test_tabs_survive_desktop_restarts(self):
         exe = ROOT / "Branchdesk.exe"
         def api(url, endpoint, **data):
