@@ -2,7 +2,7 @@
 
 **English** · [한국어](README.ko.md) · [日本語](README.ja.md)
 
-A local Git GUI for Windows and WSL. Manage Windows repositories with Windows Git and WSL repositories with the selected distribution's Git in the same application. The application UI is currently in Korean; this guide includes the button labels used in the app.
+A local Git GUI for Windows and WSL. Manage Windows repositories with Windows Git and WSL repositories with the selected distribution's Git in the same application. The application interface is currently Korean. Feature names and instructions in this guide are translated into English.
 
 ## Start on Windows
 
@@ -12,8 +12,8 @@ Double-click `Branchdesk.exe` on Windows 11 x64. The executable contains the app
 | --- | --- |
 | An existing, working WSL distribution | Continue with the default WSL environment |
 | Windows without WSL | Select Windows Python and Git executables in the startup helper |
-| Windows Python or Git is missing | Use **앱 전용 폴더에 설치** (install in the app's tools folder) |
-| You prefer WSL | Select **WSL 방식 사용** and follow the Ubuntu/Debian setup helper |
+| Windows Python or Git is missing | Use **Install in the app tools folder** |
+| You prefer WSL | Select **Use WSL** and follow the Ubuntu/Debian setup helper |
 
 The default Windows tools directory is `%LOCALAPPDATA%\Branchdesk\tools`: Python at `python\python.exe`, Git at `git\cmd\git.exe`. Windows installations use WinGet and its package-manifest hash verification. WinGet comes with Microsoft's **App Installer**. If a package is already installed elsewhere, connect its existing executable instead of expecting WinGet to duplicate it in a new directory.
 
@@ -21,15 +21,15 @@ Automatic WSL package installation supports Ubuntu/Debian. Initial WSL installat
 
 ### Connect Windows and WSL2 environments
 
-1. Open **실행 환경** (execution environments).
-2. Click **＋ 실행 환경 추가** (add environment).
+1. Open **Execution environments**.
+2. Click **＋ Add environment**.
 3. Choose **Windows** or **WSL2**. Enter a name and, optionally, a WSL distribution name.
-4. Click **이 환경 연결하기** (connect this environment). The app discovers Python/Git and checks their versions.
-5. Use **프로그램 경로 직접 지정** (set executable paths) if discovery fails or you need a specific installation.
+4. Click **Connect environment**. The app discovers Python/Git and checks their versions.
+5. Use **Set executable paths** if discovery fails or you need a specific installation.
 
 The list shows the actual platform and distribution rather than an ambiguous “current OS.” Native Linux source launches also offer a Linux environment. Existing profile IDs and repository connections are preserved.
 
-In **저장소 열기** (open repository), choose an environment and enter its native path:
+In **Open repository**, choose an environment and enter its native path:
 
 | Environment | Example path |
 | --- | --- |
@@ -38,19 +38,23 @@ In **저장소 열기** (open repository), choose an environment and enter its n
 
 The add-environment button in the repository dialog lets you add a missing environment and return without losing the clone URL or folder you typed. Each repository tab remembers its environment. Git/Python paths are app settings; selecting them does not change global Git settings or the system PATH. Installers may register their own PATH entries when you explicitly install tools.
 
-Expand **Git·Python이 없나요? 프로그램 설치** to install missing tools. Windows accepts a user directory; WSL uses the selected distribution's package manager. After installation, connect or save the environment.
+Expand **Install missing Git/Python** to install missing tools. Windows accepts a user directory; WSL uses the selected distribution's package manager. After installation, connect or save the environment.
 
-**앱 시작 설정 (고급)** changes the Python environment that starts the EXE on its next launch. This is separate from each repository's Git environment and normally needs no change. Switching the host OS merges profile and tab references into the destination state directory; repository and private-key files are not copied. App startup uses Windows or the default WSL distribution; other distributions remain available for repository work.
+**App startup settings (advanced)** changes the Python environment that starts the EXE on its next launch. This is separate from each repository's Git environment and normally needs no change. Switching the host OS merges profile and tab references into the destination state directory; repository and private-key files are not copied. App startup uses Windows or the default WSL distribution; other distributions remain available for repository work.
 
 Git identity, credentials, line endings, and SSH agents are separate between Windows and WSL. Prefer one Git environment per worktree and use `.gitattributes` to define shared line-ending rules.
 
 ### SSH keys
 
-Expand **SSH 키 연결 · 관리** in a saved environment. Select an existing private-key path, or use **기존 키 찾기** to find keys in that environment's `.ssh` directory. **공개키 보기/복사** displays or copies only the public key for registration in your Git service account. Save with **SSH 설정 저장**. The app does not return private-key contents, edit `~/.ssh/config`, or change global Git configuration. Leaving the key blank keeps existing Git/SSH authentication.
+Expand **SSH keys** in a saved environment. Select an existing private-key path, or use **Find existing keys** to find keys in that environment's `.ssh` directory. **View/copy public key** displays or copies only the public key for registration in your Git service account. Save with **Save SSH settings**. The app does not return private-key contents, edit `~/.ssh/config`, or change global Git configuration. Leaving the key blank keeps existing Git/SSH authentication.
 
 New Ed25519 keys are created in `~/.ssh/branchdesk-NAME/id_ed25519`. Existing directories are never overwritten. App-generated keys require explicitly selecting the unencrypted-key checkbox. To use a passphrase, generate the key in that environment's terminal with `ssh-keygen -t ed25519`, connect it, and unlock it with `ssh-add`. For WSL/Linux, specify an agent socket if `SSH_AUTH_SOCK` is not inherited by the app. Windows OpenSSH uses the Windows agent service.
 
 Authentication checks support GitHub, GitLab.com, and Bitbucket. Unknown host keys are not automatically accepted. Run the appropriate `ssh -T git@HOST` command in the selected environment, verify the service's published host fingerprint, and register your public key yourself. Use a terminal for private servers or custom connection details.
+
+## Remove a repository from the list
+
+Use **Remove from list** beside a recent repository or in the repository tab menu. This removes its open tab and recent-path records; it does not delete the folder or Git files. A failed-open dialog also offers removal when a folder has been deleted or moved, or its environment cannot be reached. Removing a saved entry does not require connecting to that environment.
 
 ## Everyday work
 
@@ -58,19 +62,19 @@ Authentication checks support GitHub, GitLab.com, and Bitbucket. Unknown host ke
 | --- | --- |
 | Repository tabs | Open, clone, or initialize repositories; restore tab order and the active tab on restart; reopen recent repositories |
 | Single-click a branch | Select its commit and scroll the graph there, without checking it out; load more history if needed, within the 5,000-commit limit |
-| Double-click a local branch | Open **브랜치 변경 확인** (confirm branch change) before checkout |
-| Clean checkout | Off by default. Explicitly selecting **청소** discards the listed modifications, staged changes, and new files. Ignored files and nested Git repositories remain. A changed confirmation snapshot is rejected |
+| Double-click a local branch | Open **Confirm branch change** before checkout |
+| Clean checkout | Off by default. Explicitly selecting **Discard local changes** discards the listed modifications, staged changes, and new files. Ignored files and nested Git repositories remain. A changed confirmation snapshot is rejected |
 | File status and commits | Stage or unstage whole files or selected text changes; commit or amend the latest commit |
 | New files | Show the complete selected text version with line numbers, even without an old file to compare. Index previews read staged content; commit previews read that commit. Empty files, binary content, and limits get explicit messages |
 | History and comparison | Inspect commits, compare two selected commits, and view files as a list or folder tree. Double-click a file to expand its preview |
-| Remote webpage | **원격** opens the repository webpage in the default browser. SSH/HTTPS Git URLs are converted to web URLs with credentials removed. Select a remote when several web destinations exist. Local-path remotes have no webpage |
-| Remote settings | **원격 설정** views/copies fetch and push URLs, adds or edits remotes, and removes connections |
+| Remote webpage | **Remote** opens the repository webpage in the default browser. SSH/HTTPS Git URLs are converted to web URLs with credentials removed. Select a remote when several web destinations exist. Local-path remotes have no webpage |
+| Remote settings | **Remote settings** views/copies fetch and push URLs, adds or edits remotes, and removes connections |
 | Fetch, pull, push | Choose a remote/branch; optional prune/tags for fetch; fast-forward-only pull by default, with merge/rebase alternatives; push sets upstream |
 | Branches and tags | Create/rename/delete merged local branches, track a remote branch, rebase, create/delete tags, and push a selected tag |
 | Stashes and conflicts | Save changes, apply/pop/drop stashes, resolve conflicts by editing or choosing a side, and continue/abort operations |
 | Terminal and Explorer | Open the selected repository's Windows/WSL terminal or folder; use a new Windows Terminal window when available, with PowerShell fallback; reuse an Explorer window for the same folder |
 | Window activation feedback | Restore and activate the opened window. If Windows denies activation, flash the located window's taskbar button and show an app message to help you find it |
-| External changes | Use **새로고침** (refresh) after working in another editor or terminal |
+| External changes | Use **Refresh** after working in another editor or terminal |
 
 A regular branch switch lets Git carry compatible local changes and refuses conflicting ones. Clean checkout is destructive: review its file list before confirming.
 
@@ -88,7 +92,7 @@ For Git Flow, configure production/development branches in **Git Flow**, then st
 
 ## App updates
 
-Use **앱 업데이트 → 새 버전 받기 → 적용 후 재시작**. If your old EXE predates the updater, close it, `git pull` once, and run the new EXE first.
+Use **App update → Download new version → Apply and restart**. If your old EXE predates the updater, close it, `git pull` once, and run the new EXE first.
 
 The updater compares the current EXE with `Branchdesk.exe` on this repository's `main`, downloads a commit-pinned blob in the background, verifies its Git blob hash and Windows executable format, then checks SHA-256 when caching it in Windows. Applying saves tabs and commit-message drafts, closes the current app, and launches the new EXE. Resume data is shared across Windows/WSL host changes.
 

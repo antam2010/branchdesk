@@ -386,6 +386,35 @@ def run(base):
                 expect(loc('#env-profile')).to_have_value(profile_id)
                 page.screenshot(path=str(ROOT.parent/'environment-settings.png'))
                 click('#environment-close')
+                # Forgetting missing paths works from an open tab and a failed recent entry.
+                for index, from_recent in enumerate((False, True)):
+                    missing = base/('gone-'+str(index))
+                    git('clone',str(bare),str(missing))
+                    click('#add'); fill('#repo-path',missing); submit()
+                    expect(loc('.repo-tab')).to_have_count(3)
+                    if from_recent: click('[data-close="2"]')
+                    shutil.rmtree(missing)
+                    if from_recent:
+                        click('#add')
+                        loc('#dialog [data-recent]').filter(has_text=str(missing)).click()
+                    else: tool('refresh')
+                    expect(loc('#dialog-title')).to_have_text('저장소를 열 수 없습니다')
+                    expect(loc('#confirm')).to_have_text('목록에서 제거')
+                    submit()
+                    expect(loc('.repo-tab')).to_have_count(2)
+                    assert all(not path.endswith(str(missing)) for path in page.evaluate('recentRepos'))
+                # Removing a valid recent entry preserves its files and the form being edited.
+                profile_repo = page.evaluate("repos.find(path => path.startsWith('bd:'))")
+                click('[data-close="1"]'); click('#add')
+                fill('#repo-path','keep typed path')
+                loc('[data-forget="'+profile_repo+'"]').click()
+                expect(loc('#repo-path')).to_have_value('keep typed path')
+                expect(loc('[data-forget="'+profile_repo+'"]')).to_have_count(0)
+                assert (repo/'.git').is_dir()
+                click('#cancel')
+                page.reload()
+                expect(loc('.repo-tab')).to_have_count(1)
+                assert profile_repo not in page.evaluate("api('recent')")
                 assert not errors,errors
                 print("PASS Chromium: branch single-click reveal and double-click checkout confirmation, new/empty file previews, remote webpage selection, desktop-open feedback, environment setup, menus/clipboard, Git workflows, and app updates (native Windows launches mocked).",flush=True)
             except Exception:

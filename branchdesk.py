@@ -88,6 +88,19 @@ class Desk(ThreadingHTTPServer):
                 self.remember(path, closing=True)
             return list(self.repos)
 
+    def forget(self, path):
+        if not isinstance(path, str) or len(path)>4096 or "\x00" in path:
+            raise ValueError('제거할 저장소 경로를 확인하세요.')
+        # No filesystem access or runtime connection: stale/offline paths must also be removable.
+        with self.registry_lock:
+            remaining = [item for item in self.repos if item != path]
+            active = self.active if self.active != path else next(iter(remaining), None)
+            recent = self.tabs.update(path, forgetting=True, fallback=active)
+            self.repos.pop(path, None)
+            self.active = active
+            self.recent = recent
+            return dict(repos=remaining, active=active, recent=recent)
+
     def register(self, path, exact=False, profile=None):
         if profile is None:
             profile, path = environments.split_repo(path)
@@ -196,6 +209,8 @@ class Handler(BaseHTTPRequestHandler):
             elif self.path == "/api/new":
                 profile = d.get('profile', 'default')
                 value = self.server.register(self.server.environments.call(profile, 'new', d), profile=profile)
+            elif self.path == "/api/forget":
+                value = self.server.forget(d["path"])
             elif self.path == "/api/close":
                 value = self.server.close_tab(d["repo"])
             elif self.path == "/api/select-tab":

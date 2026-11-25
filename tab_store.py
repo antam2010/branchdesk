@@ -25,18 +25,18 @@ class TabStore:
         recent = paths((previous if isinstance(previous, list) else [active]) + repos)
         return repos, active, recent
 
-    def update(self, path, *, closing=False, fallback=None):
+    def update(self, path, *, closing=False, forgetting=False, fallback=None):
         directory = self.file.parent
         directory.mkdir(mode=0o700, parents=True, exist_ok=True)
         # Merge a single tab event with the latest state from other windows.
         with (directory / "tabs.lock").open("a") as lock:
             from environments import file_lock
             with file_lock(lock):
-                return self._update_locked(path, closing, fallback, directory)
+                return self._update_locked(path, closing, forgetting, fallback)
 
-    def _update_locked(self, path, closing, fallback, directory):
+    def _update_locked(self, path, closing, forgetting, fallback):
         repos, active, recent = self.read()
-        if closing:
+        if closing or forgetting:
             if path in repos:
                 repos.remove(path)
             if active == path:
@@ -46,6 +46,8 @@ class TabStore:
                 repos.append(path)
             active = path
             recent = [path] + [p for p in recent if p != path]
+        if forgetting:
+            recent = [p for p in recent if p != path]
         from environments import atomic_json
         atomic_json(self.file, {"repos": repos, "active": active, "recent": recent})
         return recent

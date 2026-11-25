@@ -330,7 +330,8 @@ function showTabMenu(button, x, y) {
     null,
     ['터미널 열기', blocked, () => exclusive(() => openDesktop('terminal', path))],
     ['탐색기 열기', blocked, () => exclusive(() => openDesktop('explorer', path))],
-    ['저장소 경로 복사', '', () => copyDesktopText(path)]
+    ['목록에서 제거', blocked, () => exclusive(() => forgetRepository(path))],
+    ['저장소 경로 복사', '', () => copyDesktopText(environmentRepoPath(path))]
   ]);
 }
 function openApplicationContext(target, x, y) {

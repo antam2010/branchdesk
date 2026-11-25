@@ -212,6 +212,41 @@ class EnvironmentTests(unittest.TestCase):
         self.assertEqual(result['message'],'worker helper ok')
         self.assertTrue(result['foreground'])
 
+    def test_forget_missing_and_offline_repositories_persists_without_file_deletion(self):
+        other = self.folder/'other'
+        subprocess.run(['git','init','-b','main',str(other)],check=True,capture_output=True)
+        with Desk(0) as server:
+            first = server.register(str(self.repo)); server.register(str(other))
+            moved = self.folder/'moved'; self.repo.rename(moved)
+            with patch.object(server.environments, 'call', side_effect=AssertionError('Removal must not connect to an environment')):
+                result = server.forget(first)
+            self.assertEqual(result['repos'],[str(other)])
+            self.assertNotIn(first,result['recent'])
+            self.assertTrue((moved/'.git').is_dir())
+        stale = 'bd:'+'f'*32+':/already/deleted'
+        TabStore().update(stale)
+        with Desk(0) as server:
+            self.assertNotIn(stale,server.repos)
+            self.assertIn(stale,server.recent)
+            server.forget(stale)
+            server.forget(str(other))
+            self.assertTrue((other/'.git').is_dir())
+        with Desk(0) as restored:
+            self.assertEqual(restored.repos,{})
+            self.assertNotIn(first,restored.recent)
+            self.assertNotIn(stale,restored.recent)
+            self.assertNotIn(str(other),restored.recent)
+
+    def test_forget_write_failure_preserves_open_session(self):
+        with Desk(0) as server:
+            identifier = server.register(str(self.repo))
+            with patch('environments.atomic_json', side_effect=OSError('cannot save')):
+                with self.assertRaises(OSError): server.forget(identifier)
+            self.assertIn(identifier,server.repos)
+            self.assertEqual(server.active,identifier)
+            self.assertIn(identifier,server.recent)
+            self.assertTrue((self.repo/'.git').is_dir())
+
     def test_worker_argv_does_not_interpret_distro_or_python_as_shell(self):
         command = self.manager.command(dict(kind='wsl', distro='Ubuntu test;literal', python='/opt/python with space'))
         self.assertEqual(command[:5], ['wsl.exe', '--distribution', 'Ubuntu test;literal', '--exec', '/opt/python with space'])

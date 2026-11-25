@@ -364,9 +364,31 @@ function enableCommit() {
 }
 function recentList() {
   if (!recentRepos.length) return "";
-  const buttons = recentRepos.map(path => '<button type="button" data-recent="' + esc(path) +
-    '"><strong>' + esc(environmentRepoName(path)) + '</strong><small>' + esc(environmentRepoPath(path)) + '</small></button>');
+  const buttons = recentRepos.map(path => '<div class="recent-item"><button type="button" data-recent="' + esc(path) +
+    '"><strong>' + esc(environmentRepoName(path)) + '</strong><small>' + esc(environmentRepoPath(path)) + '</small></button><button type="button" class="forget-repo" data-forget="' + esc(path) + '" aria-label="' + esc(environmentRepoName(path)) + ' 목록에서 제거" title="열린 탭과 최근 목록에서 제거합니다. 실제 폴더와 Git 파일은 유지합니다.">목록에서 제거</button></div>');
   return '<section class="recent-repos"><h3>최근 저장소</h3><div>' + buttons.join("") + '</div></section>';
+}
+function repositoryUnavailable(path, error) {
+  dialog('저장소를 열 수 없습니다', info(environmentRepoPath(path)) + info(error.message) +
+    info('폴더를 삭제하거나 옮겼다면 목록에서 제거할 수 있습니다. 실제 폴더와 Git 파일은 삭제하지 않습니다.'), '목록에서 제거', () => forgetRepository(path));
+}
+async function forgetRepository(path) {
+  const workspace = await api('forget', {path});
+  repos = workspace.repos; recentRepos = workspace.recent;
+  if (repo === path || !repos.includes(repo)) {
+    if (workspace.active) await refresh(workspace.active);
+    else {
+      repo = ''; s = null; rev = ''; selected = null; fileList = [];
+      compareBase = ''; waitingForEnd = false;
+      render();
+    }
+  } else if (!s) render(); else chrome();
+  const recent = $('#dialog .recent-repos');
+  if (recent) {
+    if (recentRepos.length) recent.outerHTML = recentList();
+    else recent.remove();
+  }
+  notice('저장소를 목록에서 제거했습니다. 실제 폴더는 유지됩니다.');
 }
 async function loadRecent() {
   recentRepos = await api("recent");
@@ -385,10 +407,9 @@ function render() {
 async function refresh(next = repo) {
   const changed = next !== repo,
     n = changed ? 150 : limit;
-  const data = await api("state", {
-    repo: next,
-    count: n
-  });
+  let data;
+  try { data = await api("state", {repo: next, count: n}); }
+  catch (error) { repositoryUnavailable(next, error); throw error; }
   repo = next;
   s = data;
   limit = n;
@@ -504,13 +525,16 @@ function clickAction(e) {
   const el = e.target.closest("button");
   if (!el || busy) return;
   const d = el.dataset;
+  if (d.forget !== undefined) return exclusive(() => forgetRepository(d.forget));
   if (["add", "open-empty"].includes(el.id)) return exclusive(async () => {
     await loadRecent();
     repositoryDialog();
   });
   if (d.recent !== undefined) return exclusive(async () => {
     if ($("#dialog").open) $("#dialog").close();
-    const next = await api("open", {path: d.recent, exact: true});
+    let next;
+    try { next = await api("open", {path: d.recent, exact: true}); }
+    catch (error) { repositoryUnavailable(d.recent, error); return; }
     repos = await api("repos");
     await refresh(next);
   });
