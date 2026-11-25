@@ -75,20 +75,26 @@ header {
 }
 
 .commit-context {
-  position:fixed; z-index:1000; min-width:min(315px,calc(100vw - 12px));
+  position:fixed; z-index:1000; width:max-content; min-width:min(270px,calc(100vw - 12px));
   max-width:calc(100vw - 12px); max-height:calc(100dvh - 12px); overflow:auto;
-  padding:5px; background:#f8faf9; color:var(--ink); border:1px solid #b8c8c3;
-  border-radius:5px; box-shadow:0 5px 18px #17383c35; font-size:12px;
+  padding:3px 2px; background:#f0f0f0; color:#111; border:1px solid #9b9b9b;
+  border-radius:0; box-shadow:2px 3px 4px #0004;
+  font:12px/1.4 "Segoe UI","Malgun Gothic",sans-serif;
+  user-select:none; -webkit-user-select:none; overscroll-behavior:contain;
 }
 .commit-context > button {
-  display:flex; align-items:center; justify-content:space-between; gap:20px;
-  width:100%; padding:6px 12px; text-align:left; border-radius:3px;
-  white-space:normal; min-height:28px; line-height:1.3;
+  display:flex; align-items:center; justify-content:space-between; gap:30px;
+  width:100%; padding:3px 16px 3px 27px; text-align:left; border-radius:0;
+  min-height:23px; line-height:1.35; border:1px solid transparent; cursor:default;
 }
-.commit-context > button:hover:not(:disabled),.commit-context > button:focus-visible { background:#dcece6; outline:0; }
-.commit-context > button:disabled { color:#899691; opacity:1; }
-.commit-context > button > span { color:var(--muted); font-size:11px; white-space:nowrap; }
-.commit-context > [role="separator"] { height:1px; background:#cbd6d2; margin:4px 3px; }
+.commit-context > button:hover:not(:disabled),.commit-context > button:focus-visible,
+.commit-context > button[aria-expanded="true"] { background:#d8e9f8; border-color:#a4c7e7; outline:0; }
+.commit-context > button:disabled { color:#999; opacity:1; }
+.commit-context .menu-label { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.commit-context .menu-hint { color:#555; font-size:11px; white-space:nowrap; }
+.commit-context > button:disabled .menu-hint { color:inherit; }
+.commit-context > [role="separator"] { height:1px; background:#aaa; margin:3px 8px; border-bottom:1px solid #fff; }
+.context-submenu { z-index:1001; min-width:min(210px,calc(100vw - 12px)); }
 .commit-target { margin:10px 0; padding:10px; background:var(--wash); overflow-wrap:anywhere; }
 .commit-target code { font-family:var(--mono); font-weight:650; }
 .danger-note { color:#a12525; font-weight:600; }
