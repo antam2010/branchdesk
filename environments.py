@@ -4,6 +4,7 @@ from contextvars import ContextVar
 import io
 import json
 import os
+import platform
 from pathlib import Path
 import re
 import shlex
@@ -120,7 +121,7 @@ def invoke(op, data, profile):
             match = re.search(r'\b(\d+)\.(\d+)', version)
             if code or not match or tuple(map(int, match.groups())) < (2, 28):
                 raise ValueError('Git 2.28 이상이 필요합니다. Git 실행 파일 경로를 확인하세요.')
-            return dict(os='windows' if os.name == 'nt' else 'wsl' if os.environ.get('WSL_DISTRO_NAME') else 'linux',
+            return dict(platform=native_platform(), os='windows' if os.name == 'nt' else 'wsl' if os.environ.get('WSL_DISTRO_NAME') else 'linux',
                         distro=os.environ.get('WSL_DISTRO_NAME', ''), python=sys.executable, pythonVersion=sys.version.split()[0],
                         git=git_path or 'git', gitVersion=version, ssh=profile_tool(profile, 'ssh'),
                         keygen=profile_tool(profile, 'ssh-keygen'), home=str(Path.home()), key=profile.get('key', ''))
@@ -257,10 +258,18 @@ class Environments:
 
     def get(self, identifier='default'):
         if identifier == 'default':
-            return dict(dict(id='default', name='현재 실행 환경', kind='local', python=sys.executable,
+            profile = dict(dict(id='default', name='', kind='local', python=sys.executable,
                              git=self.default_git, ssh='', key=''), **self.profiles.get('default', {}))
-        if identifier not in self.profiles: raise ValueError('실행 환경을 찾을 수 없습니다. 환경 설정을 확인하세요.')
-        return dict(self.profiles[identifier])
+        else:
+            if identifier not in self.profiles: raise ValueError('실행 환경을 찾을 수 없습니다. 환경 설정을 확인하세요.')
+            profile = dict(self.profiles[identifier])
+        if profile['kind'] == 'local':
+            profile.update(platform=native_platform(), distro=os.environ.get('WSL_DISTRO_NAME', ''))
+        else:
+            profile.setdefault('platform', 'Windows' if profile['kind'] == 'windows' else 'WSL')
+        if not profile.get('name') or profile['name'] == '현재 실행 환경':
+            profile['name'] = profile['platform'] + (' · ' + profile['distro'] if profile.get('distro') else '')
+        return profile
 
     def windows_root(self):
         if self._windows_root is not None: return self._windows_root
@@ -314,7 +323,7 @@ class Environments:
 
     def list(self):
         with self.lock:
-            return dict(profiles=[self.get('default')] + [dict(p) for k,p in self.profiles.items() if k != 'default'],
+            return dict(profiles=[self.get('default')] + [self.get(k) for k in self.profiles if k != 'default'],
                         os='windows' if os.name == 'nt' else 'wsl' if os.environ.get('WSL_DISTRO_NAME') else 'linux',
                         install=dict(self.install_state), windowsRoot=self.windows_root())
 
@@ -355,6 +364,24 @@ class Environments:
         if 'error' in reply: raise ValueError(reply['error'])
         return reply['value']
 
+    def discover_python(self, profile):
+        kind = profile['kind']
+        if kind == 'local' or (kind == 'windows' and os.name == 'nt') or (kind == 'wsl' and os.environ.get('WSL_DISTRO_NAME') and profile.get('distro') == os.environ['WSL_DISTRO_NAME']):
+            return sys.executable
+        if kind == 'windows':
+            from process_utils import run
+            powershell = shutil.which('powershell.exe')
+            if powershell:
+                # Fixed discovery script; no profile or repository text becomes PowerShell source.
+                script = r"[Console]::OutputEncoding=[Text.Encoding]::UTF8;$p=@();$p+=Join-Path $env:LOCALAPPDATA 'Branchdesk/tools/python/python.exe';$c=Get-Command python.exe -ErrorAction SilentlyContinue;if($c){$p+=$c.Source};foreach($h in @('HKCU:\Software\Python\PythonCore','HKLM:\Software\Python\PythonCore')){Get-ChildItem $h -ErrorAction SilentlyContinue|ForEach-Object{$v=Get-ItemProperty ($_.PSPath+'\InstallPath') -ErrorAction SilentlyContinue;if($v.ExecutablePath){$p+=$v.ExecutablePath}}};@($p|Where-Object{$_ -notlike '*\WindowsApps\*' -and (Test-Path -LiteralPath $_ -PathType Leaf)}|Select-Object -Unique)|ConvertTo-Json -Compress"
+                code, output, error = run([powershell, '-NoProfile', '-NonInteractive', '-Command', script], timeout=20, limit=32000)
+                if not code and output.strip():
+                    paths = json.loads(output.decode('utf-8-sig'))
+                    if isinstance(paths, str): paths = [paths]
+                    if isinstance(paths, list) and paths: return paths[0]
+            return 'python.exe'
+        return 'python3'
+
     def save(self, raw):
         kind = raw.get('kind')
         identifier = raw.get('id') or uuid.uuid4().hex
@@ -364,12 +391,14 @@ class Environments:
                    for field in ('name', 'python', 'git', 'ssh', 'key', 'distro', 'agent')}
         profile.update(id=identifier, kind=kind)
         if identifier == 'default' and kind != 'local': raise ValueError('현재 실행 환경의 종류는 변경할 수 없습니다. 새 환경을 추가하세요.')
+        if not profile['python']: profile['python'] = self.discover_python(profile)
         # Verify before publishing. Existing open repositories keep their saved configuration on failure.
         probe = self.execute(profile, 'probe', {})
         expected = 'windows' if kind == 'windows' else 'wsl' if kind == 'wsl' else None
         if expected and probe['os'] != expected:
             raise ValueError('선택한 Python이 실행 환경과 일치하지 않습니다.')
-        profile.update(python=probe['python'], git=probe['git'])
+        profile.update(python=probe['python'], git=probe['git'], platform=probe['platform'],
+                       distro=probe.get('distro', profile['distro']), pythonVersion=probe['pythonVersion'], gitVersion=probe['gitVersion'])
         with self.lock:
             folder = self.file.parent; folder.mkdir(parents=True, exist_ok=True)
             with (folder/'environments.lock').open('a+') as lock, file_lock(lock):
@@ -413,6 +442,13 @@ def split_repo(value):
         if not re.fullmatch('[0-9a-f]{32}', identifier): raise ValueError('저장소 환경을 확인하세요.')
         return identifier, path
     return 'default', value
+
+
+def native_platform():
+    if os.name == 'nt': return 'Windows'
+    if os.environ.get('WSL_DISTRO_NAME'):
+        return 'WSL2' if 'wsl2' in platform.release().lower() else 'WSL'
+    return 'Linux'
 
 
 def host_kind():

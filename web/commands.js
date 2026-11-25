@@ -79,7 +79,14 @@ function bindDirectoryPicker() {
     suggest();
   }
   input.oninput = input.onfocus = suggest;
-  if ($('#repo-environment')) $('#repo-environment').onchange = () => { input.value = ''; close(); input.focus(); };
+  function environmentHint() {
+    const profile = environmentData.profiles.find(p => p.id === valueOf('repo-environment'));
+    const platform = environmentPlatform(profile);
+    $('#repo-environment-hint').textContent = platform + '의 Git으로 처리합니다. ' + (platform === 'Windows' ? '예: C:/projects/my-app' : '예: /home/사용자/projects/my-app');
+    input.placeholder = platform === 'Windows' ? 'C:/projects/my-app' : '~/projects/my-app';
+  }
+  if ($('#repo-environment')) { $('#repo-environment').onchange = () => { input.value = ''; close(); environmentHint(); input.focus(); }; environmentHint(); }
+  if ($('#repo-add-environment')) $('#repo-add-environment').onclick = addEnvironmentFromRepository;
   input.onblur = close;
   list.onmousedown = event => event.preventDefault(); // Keep the text caret in the field.
   list.onclick = event => {
@@ -109,9 +116,9 @@ function bindDirectoryPicker() {
     }
   };
 }
-async function repositoryDialog() {
+async function repositoryDialog(resume = null) {
   try { await loadEnvironments(); } catch (error) { notice(error.message); return; }
-  const path = () => selectField('repo-environment', '실행 환경', environmentOptions(), s?.environment || 'default') + '<div><label for="repo-path">저장소 경로 (선택한 환경 기준)</label>' +
+  const path = () => '<div class="repository-environment">' + selectField('repo-environment', '이 저장소에서 사용할 환경', environmentOptions(), resume?.profile || s?.environment || 'default') + '<button id="repo-add-environment" type="button">＋ 실행 환경 추가</button></div><p id="repo-environment-hint" class="environment-help"></p><div><label for="repo-path">저장소 경로 (선택한 환경 기준)</label>' +
     '<input class="form-input" id="repo-path" role="combobox" aria-expanded="false" ' +
     'aria-autocomplete="list" aria-controls="repo-path-options" autocomplete="off" spellcheck="false" required>' +
     '<ul id="repo-path-options" role="listbox" aria-label="추천 폴더" hidden></ul></div>';
@@ -145,7 +152,12 @@ async function repositoryDialog() {
     form: () => path() + textField('initial', '첫 브랜치', 'main'),
     bind: bindDirectoryPicker,
     run: () => enter('init')
-  }]);
+  }], resume?.mode);
+  if (resume) {
+    $('#repo-path').value = resume.path || '';
+    if ($('#repo-url')) $('#repo-url').value = resume.url || '';
+    if ($('#initial')) $('#initial').value = resume.name || 'main';
+  }
   $('#repo-path').focus();
 }
 function fetchDialog() {

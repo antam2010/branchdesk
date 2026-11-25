@@ -1,48 +1,74 @@
 // Environment and SSH settings never request or display a private key's contents.
-let environmentData = {profiles: []}, selectedEnvironment = 'default', environmentTimer;
-const environmentOptions = () => environmentData.profiles.map(p => [p.id, p.name + ' · ' + (p.kind === 'local' ? '현재 OS' : p.kind.toUpperCase())]);
+let environmentData = {profiles: []}, selectedEnvironment = 'default', previousEnvironment = 'default', environmentTimer;
+const environmentPlatform = profile => profile.platform || (profile.kind === 'local' ? ({windows: 'Windows', wsl: 'WSL2', linux: 'Linux'}[environmentData.os]) : profile.kind === 'windows' ? 'Windows' : 'WSL2');
+function environmentLabel(profile) {
+  const platform = environmentPlatform(profile), name = profile.name === '현재 실행 환경' ? platform : profile.name;
+  return (name?.startsWith(platform) ? name : platform + ' · ' + name) + (profile.id === 'default' ? ' (기본)' : '');
+}
+const environmentOptions = () => environmentData.profiles.map(p => [p.id, environmentLabel(p)]);
 async function loadEnvironments() {
   environmentData = await api('environments');
   return environmentData;
 }
 function envMessage(message) { $('#env-message').textContent = message; }
-function environmentForm(profile) {
+function showEnvironmentReport(result) {
+  $('#env-report').textContent = result.message || [result.platform || result.os, result.distro, result.gitVersion, 'Python ' + result.pythonVersion, 'Git: ' + result.git, 'Python: ' + result.python].filter(Boolean).join('\n');
+}
+function environmentForm(profile = {}, newKind = 'windows') {
   selectedEnvironment = profile.id || '';
+  const adding = !selectedEnvironment;
+  const kind = adding ? newKind : profile.kind === 'local' ? environmentData.os === 'windows' ? 'windows' : environmentData.os === 'wsl' ? 'wsl' : 'local' : profile.kind;
+  const platform = adding ? kind === 'windows' ? 'Windows' : kind === 'wsl' ? 'WSL2' : 'Linux' : environmentPlatform(profile);
   $('#env-profile').value = selectedEnvironment;
-  $('#env-fields').innerHTML = textField('env-name', '환경 이름', profile.name || '') +
-    selectField('env-kind', '실행 위치', [['local', '현재 앱과 같은 OS'], ['windows', 'Windows'], ['wsl', 'WSL 배포판']], profile.kind || 'windows') +
-    textField('env-distro', 'WSL 배포판 이름 (비우면 기본 배포판)', profile.distro || '', false) +
+  $('#env-picker').hidden = adding;
+  $('#env-add-heading').hidden = !adding;
+  $('#env-add-back').hidden = !adding;
+  $('#env-type-choice').hidden = !adding;
+  $('#env-type-choice').innerHTML = [['windows', 'Windows', 'C:\\projects 같은 Windows 폴더'], ['wsl', 'WSL2', '/home/... 같은 Linux 폴더'], ...(environmentData.os === 'linux' ? [['local', 'Linux', '이 PC의 Linux 폴더']] : [])].map(([value, title, description]) => '<button type="button" data-env-kind="' + value + '" aria-pressed="' + (kind === value) + '"><strong>' + title + '</strong><small>' + esc(description) + '</small></button>').join('');
+  $('#env-type-choice').querySelectorAll('button').forEach(button => button.onclick = () => environmentForm({}, button.dataset.envKind));
+  $('#env-fields').innerHTML = '<input id="env-kind" type="hidden" value="' + esc(adding ? kind : profile.kind) + '">' +
+    '<div class="environment-summary"><strong>' + esc(platform + (profile.distro ? ' · ' + profile.distro : '')) + '</strong><span>' + (adding ? '새로 연결할 환경' : profile.id === s?.environment ? '이 저장소에서 사용 중' : '등록된 환경') + '</span></div>' +
+    textField('env-name', '환경 이름', profile.name || platform) +
+    (kind === 'wsl' ? textField('env-distro', 'WSL 배포판 (비우면 기본 배포판)', profile.distro || '', false) : '<input id="env-distro" type="hidden" value="">') +
+    '<p class="environment-help">' + (kind === 'windows' ? 'Windows에 설치된 Git·Python을 자동으로 찾아 연결합니다.' : kind === 'wsl' ? '선택한 WSL 배포판의 Git·Python을 자동으로 찾아 연결합니다.' : 'Linux에 설치된 Git·Python을 사용합니다.') + '</p>' +
+    '<details id="env-tool-settings"><summary>프로그램 경로 직접 지정 (선택)</summary>' +
     textField('env-python', 'Python 실행 파일', profile.python || '', false) +
-    textField('env-git', 'Git 실행 파일 (비우면 해당 환경에서 자동 검색)', profile.git || '', false) +
-    textField('env-ssh', 'SSH 실행 파일 (선택)', profile.ssh || '', false) +
-    textField('env-key', 'SSH 개인키 경로 (비우면 기존 SSH 설정·에이전트 사용)', profile.key || '', false) +
-    textField('env-agent', 'WSL/Linux ssh-agent 소켓 (선택)', profile.agent || '', false);
-  $('#env-kind').disabled = profile.id === 'default';
-  $('#env-kind').onchange = () => {
-    $('#env-distro').closest('label').hidden = valueOf('env-kind') !== 'wsl';
-    $('#env-python').placeholder = valueOf('env-kind') === 'windows' ? 'C:\\...\\python.exe' : '/usr/bin/python3';
-  };
-  $('#env-kind').onchange();
+    textField('env-git', 'Git 실행 파일', profile.git || '', false) + '<p>자동으로 찾지 못했거나 다른 버전을 쓰고 싶을 때 지정하세요.</p></details>';
+  $('#env-python').placeholder = kind === 'windows' ? '자동 검색 · C:\\...\\python.exe' : '자동 검색 · /usr/bin/python3';
+  $('#env-git').placeholder = kind === 'windows' ? '자동 검색 · C:\\...\\git.exe' : '자동 검색 · /usr/bin/git';
+  $('#env-ssh-fields').innerHTML = textField('env-key', 'SSH 개인키 경로 (비우면 기존 인증 사용)', profile.key || '', false) +
+    '<details><summary>SSH 세부 설정</summary>' + textField('env-ssh', 'SSH 실행 파일 (선택)', profile.ssh || '', false) + textField('env-agent', 'WSL/Linux ssh-agent 소켓 (선택)', profile.agent || '', false) + '</details>';
   $('#env-report').textContent = '';
-  $('#env-ssh-actions').hidden = !profile.id;
-  $('#env-startup').hidden = !profile.id || !environmentData.windowsRoot;
-  $('#env-install-kind').value = profile.kind === 'wsl' || profile.kind === 'local' && environmentData.os === 'wsl' ? 'wsl' : 'windows';
+  $('#env-diagnostics').open = false;
+  $('#env-ssh-actions').hidden = adding;
+  $('#env-ssh-actions').open = false;
+  $('#env-startup-settings').hidden = adding || !environmentData.windowsRoot;
+  $('#env-startup-settings').open = false;
+  $('#env-check').hidden = adding;
+  $('#env-save').textContent = adding ? '이 환경 연결하기' : '변경 사항 저장';
+  $('#env-install-kind').value = kind === 'wsl' ? 'wsl' : 'windows';
   $('#env-install-dir').value = environmentData.windowsRoot ? environmentData.windowsRoot.replace(/\\/g, '/') + '/tools' : '';
   $('#env-install-distro').value = profile.distro || '';
+  $('#env-install-distro').closest('label').hidden = kind !== 'wsl';
+  $('#env-install-dir').closest('label').hidden = kind === 'wsl';
+  $('#env-install-settings').open = false;
   $('#env-keys').replaceChildren();
 }
 function environmentSelect() {
-  $('#env-profile').innerHTML = optionList([...environmentOptions(), ['', '＋ 새 환경']], selectedEnvironment);
+  $('#env-profile').innerHTML = optionList(environmentOptions(), selectedEnvironment);
 }
-async function openEnvironmentSettings() {
+async function openEnvironmentSettings(initialAdd = false) {
   if (busy) return notice('현재 Git 작업이 끝난 뒤 환경 설정을 여세요.');
   if (document.querySelector('dialog[open]')) return;
   try {
     await loadEnvironments();
     selectedEnvironment = s?.environment || 'default';
     environmentSelect();
-    environmentForm(environmentData.profiles.find(p => p.id === selectedEnvironment) || {});
-    envMessage('저장소를 열 때 실행 환경을 선택합니다. Python·Git 경로는 선택한 OS 기준으로 입력하세요.');
+    if (initialAdd === true) startEnvironmentAdd();
+    else {
+      environmentForm(environmentData.profiles.find(p => p.id === selectedEnvironment) || {});
+      envMessage('한 앱에서 Windows와 WSL2 저장소를 함께 사용할 수 있습니다. 다른 환경은 실행 환경 추가로 연결하세요.');
+    }
     $('#environment-dialog').showModal();
     environmentTimer = setInterval(async () => {
       if (!$('#environment-dialog').open) return clearInterval(environmentTimer);
@@ -50,51 +76,81 @@ async function openEnvironmentSettings() {
         await loadEnvironments();
         $('#env-install-status').textContent = environmentData.install.message || '';
         $('#env-install').disabled = environmentData.install.state === 'running';
-      } catch { /* Leave the form available for retry. */ }
+      } catch { /* Keep user input available for retry. */ }
     }, 1800);
   } catch (error) { notice(error.message); }
 }
+function startEnvironmentAdd() {
+  if (selectedEnvironment) previousEnvironment = selectedEnvironment;
+  const opposite = environmentData.os === 'windows' ? 'wsl' : 'windows';
+  environmentForm({}, opposite);
+  envMessage('① Windows 또는 WSL2 선택 → ② 환경 이름 확인 → ③ 연결하기. 프로그램 경로는 자동으로 찾습니다.');
+}
+async function addEnvironmentFromRepository() {
+  const resume = {mode: valueOf('operation'), profile: valueOf('repo-environment'), path: valueOf('repo-path'), url: $('#repo-url')?.value, name: $('#initial')?.value};
+  $('#dialog').close();
+  await openEnvironmentSettings(true);
+  if (!$('#environment-dialog').open) { await repositoryDialog(resume); return; }
+  $('#environment-dialog').addEventListener('close', () => {
+    if (environmentData.profiles.some(p => p.id === selectedEnvironment)) resume.profile = selectedEnvironment;
+    repositoryDialog(resume);
+  }, {once: true});
+}
 async function envTask(job) {
-  const buttons = [...$('#environment-dialog').querySelectorAll('button[data-env-task]')];
+  const buttons = [...$('#environment-dialog').querySelectorAll('button[data-env-task], #env-type-choice button')];
   buttons.forEach(button => button.disabled = true);
   $('#env-profile').disabled = true;
   try { await job(); }
   catch (error) { envMessage(error.message); }
   finally { buttons.forEach(button => button.disabled = false); $('#env-profile').disabled = false; }
 }
-$('#environment-open').onclick = openEnvironmentSettings;
+$('#environment-open').onclick = () => openEnvironmentSettings();
 $('#environment-close').onclick = () => $('#environment-dialog').close();
 $('#environment-dialog').addEventListener('close', () => clearInterval(environmentTimer));
-$('#env-profile').onchange = () => environmentForm(environmentData.profiles.find(p => p.id === valueOf('env-profile')) || {});
+$('#env-add').onclick = startEnvironmentAdd;
+$('#env-add-back').onclick = () => {
+  selectedEnvironment = previousEnvironment || s?.environment || 'default'; environmentSelect();
+  environmentForm(environmentData.profiles.find(p => p.id === selectedEnvironment));
+  envMessage('저장소를 열 때 Windows 또는 WSL2 환경을 선택하세요.');
+};
+$('#env-profile').onchange = () => {
+  environmentForm(environmentData.profiles.find(p => p.id === valueOf('env-profile')));
+  envMessage('이 환경의 설정입니다. SSH 키와 프로그램 경로는 필요할 때 펼쳐서 변경하세요.');
+};
 $('#env-save').onclick = () => envTask(async () => {
   const profile = {id: selectedEnvironment};
+  const adding = !selectedEnvironment;
   for (const field of ['name', 'kind', 'distro', 'python', 'git', 'ssh', 'key', 'agent']) profile[field] = valueOf('env-' + field);
-  const result = await api('environments', {action: 'save', profile});
+  envMessage('Git·Python을 찾아 연결을 확인하고 있습니다…');
+  let result;
+  try { result = await api('environments', {action: 'save', profile}); }
+  catch (error) {
+    $('#env-report').textContent = error.message;
+    if (adding && !profile.python) throw new Error('프로그램을 자동으로 연결하지 못했습니다. 아래의 프로그램 설치를 이용하거나 프로그램 경로를 직접 지정하세요. 자세한 원인은 진단 결과에서 확인할 수 있습니다.');
+    throw error;
+  }
   await loadEnvironments(); selectedEnvironment = result.profile.id;
-  environmentSelect(); environmentForm(result.profile);
-  $('#env-report').textContent = JSON.stringify(result.probe, null, 2);
-  envMessage('경로를 확인하고 저장했습니다. 이 환경을 선택한 저장소의 다음 작업부터 사용합니다.');
+  environmentSelect(); environmentForm(environmentData.profiles.find(p => p.id === selectedEnvironment));
+  showEnvironmentReport(result.probe);
+  envMessage(environmentLabel(result.profile) + (adding ? ' 연결 완료! 저장소 열기에서 이 환경을 선택하세요.' : ' 설정을 저장했습니다.') + ' · ' + result.probe.gitVersion + ' · Python ' + result.probe.pythonVersion);
 });
+$('#env-ssh-save').onclick = () => $('#env-save').click();
 $('#env-check').onclick = () => envTask(async () => {
   const result = await api('environments', {action: 'probe', profile: selectedEnvironment});
-  $('#env-report').textContent = JSON.stringify(result, null, 2);
-  envMessage('저장된 실행 환경이 정상 동작합니다. 수정한 경로는 확인·저장 버튼으로 검사하세요.');
+  showEnvironmentReport(result);
+  envMessage((result.platform || environmentPlatform(environmentData.profiles.find(p => p.id === selectedEnvironment))) + ' 연결 정상 · ' + result.gitVersion + ' · Python ' + result.pythonVersion);
 });
 $('#env-install').onclick = () => envTask(async () => {
   const kind = valueOf('env-install-kind'), directory = valueOf('env-install-dir'), distro = valueOf('env-install-distro');
-  if (selectedEnvironment === 'default' && ((kind === 'windows') !== (environmentData.os === 'windows'))) throw new Error('현재 OS와 다른 프로그램을 설치하려면 먼저 환경 목록에서 ＋ 새 환경을 선택하세요.');
   await api('environments', {action: 'install', kind, directory, distro});
   if (kind === 'windows') {
-    $('#env-kind').value = selectedEnvironment === 'default' ? 'local' : 'windows';
     $('#env-python').value = directory.replace(/[\\/]$/, '') + '/python/python.exe';
     $('#env-git').value = directory.replace(/[\\/]$/, '') + '/git/cmd/git.exe';
   } else {
-    if (selectedEnvironment !== 'default') $('#env-kind').value = 'wsl';
     $('#env-distro').value = distro;
     $('#env-python').value = '/usr/bin/python3'; $('#env-git').value = '/usr/bin/git';
   }
-  $('#env-kind').onchange();
-  envMessage('설치 창을 열었습니다. 설치 후 경로를 확인·저장하세요. WSL은 배포판 패키지 경로에 설치합니다.');
+  envMessage('설치 창을 열었습니다. 완료되면 이 환경 연결하기 또는 변경 사항 저장을 누르세요.');
 });
 $('#env-startup').onclick = () => envTask(async () => {
   const message = await api('environments', {action: 'startup', profile: selectedEnvironment});
@@ -103,7 +159,7 @@ $('#env-startup').onclick = () => envTask(async () => {
 $('#env-keys-load').onclick = () => envTask(async () => {
   const keys = await api('environments', {action: 'ssh-list', profile: selectedEnvironment});
   $('#env-keys').innerHTML = '<option value="">기존 키 선택…</option>' + optionList(keys.map(k => [k.path, k.path]));
-  envMessage(keys.length ? '키를 선택한 뒤 확인·저장하세요.' : '기본 .ssh 폴더에 키가 없습니다. 직접 경로를 입력하거나 새 키를 생성하세요.');
+  envMessage(keys.length ? '키를 선택한 뒤 SSH 설정 저장을 누르세요.' : '기본 .ssh 폴더에 키가 없습니다. 직접 경로를 입력하거나 새 키를 생성하세요.');
 });
 $('#env-keys').onchange = () => { if (valueOf('env-keys')) $('#env-key').value = valueOf('env-keys'); };
 $('#env-public').onclick = () => envTask(async () => {
@@ -122,10 +178,11 @@ $('#env-generate').onclick = () => envTask(async () => {
   const result = await api('environments', {action: 'ssh-generate', profile: selectedEnvironment,
     name: valueOf('env-key-name'), comment: valueOf('env-key-comment'), unprotected: checked('env-unprotected')});
   $('#env-key').value = result.path; $('#env-public-key').value = result.public;
-  envMessage('새 키를 만들었습니다. 공개키를 서비스에 등록하고 확인·저장하세요.');
+  envMessage('새 키를 만들었습니다. 공개키를 서비스에 등록하고 SSH 설정 저장을 누르세요.');
 });
 $('#env-test').onclick = () => envTask(async () => {
   const result = await api('environments', {action: 'ssh-test', profile: selectedEnvironment, host: valueOf('env-ssh-host')});
   $('#env-report').textContent = result.message + '\n' + result.hint;
+  $('#env-diagnostics').open = true;
   envMessage(result.authenticated ? 'SSH 인증에 성공했습니다.' : 'SSH 인증을 완료하지 못했습니다. 아래 결과를 확인하세요.');
 });

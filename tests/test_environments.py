@@ -165,6 +165,23 @@ class EnvironmentTests(unittest.TestCase):
         self.assertEqual(restored['repo'], expected)
         self.assertEqual(restored['drafts'], [[expected, 'unfinished message']])
 
+    def test_automatic_local_connection_needs_no_executable_paths(self):
+        saved = self.manager.save(dict(kind='local', name='자동 연결'))
+        self.assertEqual(saved['profile']['python'], sys.executable)
+        self.assertTrue(saved['profile']['git'])
+        self.assertEqual(saved['profile']['platform'], environments.native_platform())
+        self.assertIn('gitVersion', saved['profile'])
+
+    def test_default_label_identifies_wsl2_distribution_and_preserves_profile_id(self):
+        with patch.dict(os.environ, WSL_DISTRO_NAME='Ubuntu'), patch('environments.platform.release', return_value='6.6-microsoft-standard-WSL2'):
+            profile = self.manager.get('default')
+            self.assertEqual(profile['platform'], 'WSL2')
+            self.assertEqual(profile['name'], 'WSL2 · Ubuntu')
+            self.assertEqual(profile['id'], 'default')
+            self.assertEqual(profile['kind'], 'local')
+            self.manager.profiles['default'] = dict(name='내 프로젝트')
+            self.assertEqual(self.manager.get('default')['name'], '내 프로젝트')
+
     def test_worker_argv_does_not_interpret_distro_or_python_as_shell(self):
         command = self.manager.command(dict(kind='wsl', distro='Ubuntu test;literal', python='/opt/python with space'))
         self.assertEqual(command[:5], ['wsl.exe', '--distribution', 'Ubuntu test;literal', '--exec', '/opt/python with space'])

@@ -108,7 +108,8 @@ class Desk(ThreadingHTTPServer):
             value = self.environments.call(profile, op, dict(data, root=native_path))
             if op == 'state':
                 value.update(path=identifier, displayPath=native_path, environment=profile,
-                             environmentName=self.environments.get(profile)['name'])
+                             environmentName=self.environments.get(profile)['name'],
+                             environmentPlatform=self.environments.get(profile)['platform'])
             return value
 
 

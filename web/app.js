@@ -123,7 +123,7 @@ function chrome() {
   $("#go-work").className = mode === "work" ? "active-nav" : "";
   $("#go-log").disabled = off;
   $("#go-work").disabled = off;
-  $("#foot-repo").textContent = (s ? s.environmentName + " · " + s.displayPath : environmentRepoPath(repo)) || "저장소를 열어 주세요";
+  $("#foot-repo").textContent = (s ? (s.environmentName.startsWith(s.environmentPlatform) ? s.environmentName : s.environmentPlatform + " · " + s.environmentName) + " · " + s.displayPath : environmentRepoPath(repo)) || "저장소를 열어 주세요";
   $("#nav-refs").innerHTML = s ? [["heads", "브랜치", "branch"], ["remotes", "원격 브랜치", "remote"], ["tags", "태그", "tag"]].map(([g, name, k]) => {
     const refs = s.refs.map((r, i) => ({
       ...r,
@@ -367,7 +367,7 @@ function render() {
   ++diffSeq;
   chrome();
   if (!s) {
-    $("#main").innerHTML = '<div class="blank">' + icon("folder") + '<h2>로컬 저장소 열기</h2><p>작업할 Git 저장소의 WSL 경로를 입력하세요.</p><button class="primary" id="open-empty">저장소 열기</button>' + recentList() + '</div>';
+    $("#main").innerHTML = '<div class="blank">' + icon("folder") + '<h2>로컬 저장소 열기</h2><p>Windows 또는 WSL2 환경을 선택하고 작업할 저장소를 여세요.</p><button class="primary" id="open-empty">저장소 열기</button>' + recentList() + '</div>';
     return;
   }
   if (mode === "work") workView();else historyView();
