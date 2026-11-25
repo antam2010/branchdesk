@@ -12,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 FILES = ["branchdesk.py", "tab_store.py", "gitdesk.py", "web/app.js", "web/panes.js", "web/index.html",
-         "web/style.css", "web/icon.png", "web/favicon.ico", "workspace_ops.py", "commit_ops.py", "partial.py", "web/commands.js", "web/context.js", "web/update.js", "updater.py", "windows/update.ps1", "windows/session.py", "environments.py", "process_utils.py", "web/environments.js", "windows/tools.ps1"]
+         "web/style.css", "web/icon.png", "web/favicon.ico", "workspace_ops.py", "commit_ops.py", "partial.py", "web/commands.js", "web/context.js", "web/update.js", "updater.py", "windows/update.ps1", "windows/session.py", "environments.py", "process_utils.py", "web/environments.js", "windows/tools.ps1", "desktop_actions.py", "windows/desktop.ps1"]
 
 
 def payload():

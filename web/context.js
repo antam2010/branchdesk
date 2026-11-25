@@ -161,8 +161,8 @@ function buildCommitMenu(ctx) {
     ['HEAD와 비교', '', () => {compareBase = ctx.rev; waitingForEnd = false; rev = ctx.head; historyView();}],
     ['비교 시작점 지정', '', () => {compareBase = ctx.rev; waitingForEnd = true; historyView();}],
     null,
-    ['터미널 열기', '', () => exclusive(() => api('action', {op: 'terminal'}))],
-    ['탐색기 열기', '', () => exclusive(() => api('action', {op: 'explorer'}))]
+    ['터미널 열기', '', () => exclusive(() => openDesktop('terminal'))],
+    ['탐색기 열기', '', () => exclusive(() => openDesktop('explorer'))]
   ];
   const entries = [
     ['체크아웃…', 'checkout_commit', confirm('checkout_commit', '커밋 체크아웃', '선택한 시점으로 이동합니다. 브랜치에 연결되지 않은 detached HEAD 상태가 됩니다.')],
@@ -269,7 +269,7 @@ function assertMenuRepo(expected) {
 }
 function showReferenceMenu(button, x, y) {
   const ref = {...s.refs[Number(button.dataset.ref)]}, expected = repo;
-  const view = () => {assertMenuRepo(expected); query = ''; compareBase = ''; waitingForEnd = false; selectRev(ref.id); document.querySelector('.logrow.selected')?.scrollIntoView({block: 'nearest'});};
+  const view = () => {assertMenuRepo(expected); revealReference(ref).catch(error => notice(error.message, true));};
   const confirmAction = (title, description, op, values) => () => {
     assertMenuRepo(expected);
     dialog(title, info(description), title, () => {assertMenuRepo(expected); return mutation(op, values);});
@@ -278,7 +278,7 @@ function showReferenceMenu(button, x, y) {
   const entries = [['이 참조의 커밋 보기', '', view], ['이름 복사', '', () => copyDesktopText(ref.name)], ['SHA 값 복사', '', () => copyDesktopText(ref.id)], null];
   if (ref.group === 'heads') {
     entries.push(
-      ['체크아웃…', blocked || (ref.name === s.branch ? '현재 브랜치입니다.' : ''), confirmAction('브랜치 전환', ref.name + ' 브랜치로 전환합니다.', 'switch', {name: ref.name})],
+      ['체크아웃…', blocked || (ref.name === s.branch ? '현재 브랜치입니다.' : ''), () => exclusive(() => branchSwitchDialog(ref.name))],
       ['이름 변경…', blocked, () => {
         dialog('브랜치 이름 변경', info(ref.name) + textField('context-new-name', '새 이름', ref.name), '변경', () => {
           assertMenuRepo(expected); return mutation('branch_rename', {name: ref.name, new: valueOf('context-new-name')});
@@ -328,8 +328,8 @@ function showTabMenu(button, x, y) {
     ['이 저장소로 전환', blocked || (path === repo ? '현재 저장소입니다.' : ''), () => exclusive(async () => {await api('select-tab', {repo: path}); await refresh(path);})],
     ['탭 닫기', blocked, () => {const i = repos.indexOf(path); if (i >= 0) document.querySelector('[data-close="' + i + '"]')?.click();}],
     null,
-    ['터미널 열기', blocked, () => exclusive(() => api('action', {repo: path, op: 'terminal'}))],
-    ['탐색기 열기', blocked, () => exclusive(() => api('action', {repo: path, op: 'explorer'}))],
+    ['터미널 열기', blocked, () => exclusive(() => openDesktop('terminal', path))],
+    ['탐색기 열기', blocked, () => exclusive(() => openDesktop('explorer', path))],
     ['저장소 경로 복사', '', () => copyDesktopText(path)]
   ]);
 }
@@ -359,8 +359,8 @@ function openApplicationContext(target, x, y) {
     ['저장소 열기…', busy ? '작업 중입니다.' : '', () => exclusive(async () => {await loadRecent(); repositoryDialog();})]
   ];
   if (s) entries.push(null, ['히스토리', busy ? '작업 중입니다.' : '', () => switchMode('history')], ['파일 상태', busy ? '작업 중입니다.' : '', () => switchMode('work')], null,
-    ['터미널 열기', busy ? '작업 중입니다.' : '', () => exclusive(() => api('action', {op: 'terminal'}))],
-    ['탐색기 열기', busy ? '작업 중입니다.' : '', () => exclusive(() => api('action', {op: 'explorer'}))]);
+    ['터미널 열기', busy ? '작업 중입니다.' : '', () => exclusive(() => openDesktop('terminal'))],
+    ['탐색기 열기', busy ? '작업 중입니다.' : '', () => exclusive(() => openDesktop('explorer'))]);
   const text = window.getSelection()?.toString();
   if (text) entries.unshift(['선택 영역 복사', '', () => copyDesktopText(text), 'Ctrl+C'], null);
   showDesktopMenu(target, x, y, '워크스페이스', entries);

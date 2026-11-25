@@ -182,12 +182,76 @@ class ExtendedTests(unittest.TestCase):
         self.assertEqual(self.g("show","HEAD:notes"),"merged")
 
     def test_desktop_arguments(self):
-        with patch.dict(os.environ, {"WSL_DISTRO_NAME": "Ubuntu"}), patch("workspace_ops.shutil.which", return_value="/mnt/c/bin/wt.exe"), patch("workspace_ops.subprocess.run") as run:
-            ops.launch_desktop(self.root / "공백 ; 폴더", "terminal")
-            self.assertEqual(run.call_args.args[0], ["/mnt/c/bin/wt.exe", "--window", "new", "new-tab", "--startingDirectory", ".", "wsl.exe", "--distribution", "Ubuntu"])
-            self.assertEqual(run.call_args.kwargs["cwd"], self.root / "공백 ; 폴더")
-        with patch.dict(os.environ,{"WSL_DISTRO_NAME":"Ubuntu"}), patch("workspace_ops.shutil.which",return_value="explorer.exe"), patch("workspace_ops.subprocess.check_output",return_value="WSL path\n"), patch("workspace_ops.subprocess.Popen") as spawn:
-            self.act("explorer");self.assertEqual(spawn.call_args.args[0],["explorer.exe","WSL path"])
+        status = dict(opened=True, foreground=True, message='창을 열었습니다.')
+        root = self.root / "공백 ; 폴더"
+        with patch.dict(os.environ, {"WSL_DISTRO_NAME": "Ubuntu"}), patch("desktop_actions.open_windows", return_value=status) as spawn:
+            self.assertEqual(ops.launch_desktop(root, "terminal"), status)
+            spawn.assert_called_once_with('terminal', root=root)
+        with patch.dict(os.environ, {"WSL_DISTRO_NAME": "Ubuntu"}), patch("desktop_actions.open_windows", return_value=status) as spawn:
+            self.assertEqual(gitdesk.act(self.root, dict(op='explorer')), status)
+            spawn.assert_called_once_with('explorer', root=self.root)
+
+    def test_remote_websites_strip_transport_credentials_and_preserve_nested_groups(self):
+        cases = {
+            'git@github.com:team/app.git': 'https://github.com/team/app',
+            'ssh://git@gitlab.example.com:2222/group/sub/app.git': 'https://gitlab.example.com/group/sub/app',
+            'https://user:secret@gitlab.example.com:8443/group/app.git?token=secret': 'https://gitlab.example.com:8443/group/app',
+            'http://git.local:8080/org/repo.git/': 'http://git.local:8080/org/repo',
+            'git@ssh.dev.azure.com:v3/org/project/repo': 'https://dev.azure.com/org/project/_git/repo',
+            'git://github.com/team/app.git': 'https://github.com/team/app',
+            str(self.root): None,
+            'C:\\projects\\repo': None,
+            'file:///tmp/repo': None,
+            'javascript:alert(1)': None,
+        }
+        for source, expected in cases.items():
+            with self.subTest(source=source): self.assertEqual(ops.website_url(source), expected)
+        self.g('remote', 'add', 'origin', 'git@github.com:team/app.git')
+        before = (self.root/'.git/config').read_bytes()
+        self.assertEqual(ops.remote_websites(self.root), [dict(name='origin', url='https://github.com/team/app')])
+        with patch.dict(os.environ, {'WSL_DISTRO_NAME': 'Ubuntu'}), patch('desktop_actions.open_windows', return_value={'opened': True}) as launch:
+            gitdesk.act(self.root, dict(op='open_remote', remote='origin', website='https://github.com/team/app'))
+            launch.assert_called_once_with('web', url='https://github.com/team/app')
+            self.g('remote', 'set-url', 'origin', 'git@github.com:team/changed.git')
+            with self.assertRaises(gitdesk.GitError):
+                gitdesk.act(self.root, dict(op='open_remote', remote='origin', website='https://github.com/team/app'))
+        self.g('remote', 'set-url', 'origin', 'git@github.com:team/app.git')
+        self.assertEqual((self.root/'.git/config').read_bytes(), before)
+
+    def test_branch_switch_preserves_by_default_and_clean_requires_current_plan(self):
+        self.g('branch', 'other')
+        self.write('notes','keep change\n'); self.write('new.txt','keep new\n')
+        self.act('switch', name='other')
+        self.assertEqual((self.root/'notes').read_text(),'keep change\n')
+        self.assertTrue((self.root/'new.txt').exists())
+        self.write('staged-new.txt','staged new file\n'); self.g('add','staged-new.txt')
+        plan = ops.switch_plan(self.root, 'main')
+        self.write('new.txt','edited after confirmation\n')
+        with self.assertRaises(gitdesk.GitError):
+            self.act('switch', name='main', clean=True, planStamp=plan['stamp'], expectedHead=plan['head'], expectedBranch=plan['branch'])
+        self.assertEqual(self.g('branch','--show-current'),'other')
+        self.assertTrue((self.root/'new.txt').exists())
+        self.g('config','core.excludesFile',str(self.base/'ignore'))
+        (self.base/'ignore').write_text('ignored.tmp\n'); self.write('ignored.tmp','ignored stays')
+        plan = ops.switch_plan(self.root, 'main')
+        self.act('switch', name='main', clean=True, planStamp=plan['stamp'], expectedHead=plan['head'], expectedBranch=plan['branch'])
+        self.assertEqual(self.g('branch','--show-current'),'main')
+        self.assertEqual((self.root/'notes').read_text(),'base\n')
+        self.assertFalse((self.root/'new.txt').exists())
+        self.assertFalse((self.root/'staged-new.txt').exists())
+        self.assertTrue((self.root/'ignored.tmp').exists())
+
+    def test_locate_branch_commit_outside_initial_history(self):
+        # Build a longer history without mutating worktree contents 170 times.
+        parent = self.base_rev
+        tree = self.g('rev-parse','HEAD^{tree}')
+        for index in range(170): parent = self.g('commit-tree', tree, '-p', parent, '-m', 'commit '+str(index))
+        self.g('update-ref','refs/heads/main',parent)
+        self.g('branch','old-branch',self.base_rev)
+        self.assertNotIn(self.base_rev,[row['id'] for row in gitdesk.history(self.root,150)[0]])
+        located = gitdesk.locate_commit(self.root,self.base_rev,150)
+        self.assertGreater(located['count'],150)
+        self.assertIn(self.base_rev,[row['id'] for row in gitdesk.history(self.root,located['count'])[0]])
 
     def test_selective_pull_merge_and_rebase(self):
         source=self.remote("origin");self.act("push",remote="origin")

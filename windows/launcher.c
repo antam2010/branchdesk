@@ -1,3 +1,4 @@
+#define _WIN32_WINNT 0x0A00
 #define WIN32_LEAN_AND_MEAN
 #define UNICODE
 #define _UNICODE
@@ -189,6 +190,60 @@ static BOOL CALLBACK find_window(HWND hwnd, LPARAM data) {
     }
     return TRUE;
 }
+/* Keep geometry outside the disposable Edge profile and version cache. */
+struct saved_window { DWORD magic; WINDOWPLACEMENT placement; };
+static BOOL window_state_path(WCHAR *path, const WCHAR *name) {
+    DWORD n=GetEnvironmentVariableW(L"LOCALAPPDATA",path,MAX_PATH);
+    if(!n || n>=MAX_PATH || !append(path,MAX_PATH,L"\\Branchdesk")) return FALSE;
+    CreateDirectoryW(path,NULL);
+    return append(path,MAX_PATH,name);
+}
+static BOOL valid_placement(WINDOWPLACEMENT *p) {
+    RECT r=p->rcNormalPosition;
+    return p->length==sizeof(*p) && (p->showCmd==SW_SHOWNORMAL || p->showCmd==SW_SHOWMAXIMIZED) &&
+        r.left>=-200000 && r.left<=200000 && r.top>=-200000 && r.top<=200000 &&
+        r.right>=-200000 && r.right<=200000 && r.bottom>=-200000 && r.bottom<=200000 &&
+        r.right-r.left>=200 && r.right-r.left<=32768 && r.bottom-r.top>=150 && r.bottom-r.top<=32768;
+}
+static BOOL capture_placement(HWND window, WINDOWPLACEMENT *p) {
+    p->length=sizeof(*p);
+    if(!GetWindowPlacement(window,p)) return FALSE;
+    p->showCmd=(p->showCmd==SW_SHOWMAXIMIZED || (p->showCmd==SW_SHOWMINIMIZED && (p->flags&WPF_RESTORETOMAXIMIZED)))?SW_SHOWMAXIMIZED:SW_SHOWNORMAL;
+    p->flags=0;
+    return valid_placement(p);
+}
+static BOOL same_placement(WINDOWPLACEMENT *a, WINDOWPLACEMENT *b) {
+    return a->showCmd==b->showCmd && a->rcNormalPosition.left==b->rcNormalPosition.left &&
+        a->rcNormalPosition.top==b->rcNormalPosition.top && a->rcNormalPosition.right==b->rcNormalPosition.right &&
+        a->rcNormalPosition.bottom==b->rcNormalPosition.bottom;
+}
+static void save_placement(WINDOWPLACEMENT *placement) {
+    WCHAR path[MAX_PATH],temp[MAX_PATH],suffix[64];
+    DWORD got=0;
+    struct saved_window data={0}; data.magic=0x31574442; data.placement=*placement;
+    wsprintfW(suffix,L"\\window-%lu.tmp",GetCurrentProcessId());
+    if(!window_state_path(path,L"\\window.bin") || !window_state_path(temp,suffix)) return;
+    HANDLE file=CreateFileW(temp,GENERIC_WRITE,0,NULL,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
+    if(file==INVALID_HANDLE_VALUE) return;
+    BOOL ok=WriteFile(file,&data,sizeof(data),&got,NULL) && got==sizeof(data);
+    CloseHandle(file);
+    if(ok) MoveFileExW(temp,path,MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH);
+    DeleteFileW(temp);
+}
+static void restore_placement(HWND window) {
+    WCHAR path[MAX_PATH]; DWORD got=0;
+    struct saved_window data={0};
+    if(!window_state_path(path,L"\\window.bin")) return;
+    HANDLE file=CreateFileW(path,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
+    if(file==INVALID_HANDLE_VALUE) return;
+    BOOL ok=ReadFile(file,&data,sizeof(data),&got,NULL) && got==sizeof(data);
+    CloseHandle(file);
+    if(ok && data.magic==0x31574442 && valid_placement(&data.placement)) {
+        /* Windows adjusts off-screen placement after monitor/resolution changes. */
+        data.placement.flags=0;
+        SetWindowPlacement(window,&data.placement);
+    }
+}
 static DWORD wait_window(HANDLE backend, PROCESS_INFORMATION *edge) {
     struct window_search search={0};
     search.edge_pid=edge->dwProcessId;
@@ -202,7 +257,13 @@ static DWORD wait_window(HANDLE backend, PROCESS_INFORMATION *edge) {
     }
     if(app_icon_big) SendMessageW(search.window,WM_SETICON,ICON_BIG,(LPARAM)app_icon_big);
     if(app_icon_small) SendMessageW(search.window,WM_SETICON,ICON_SMALL,(LPARAM)app_icon_small);
+    restore_placement(search.window);
+    WINDOWPLACEMENT previous={0};
     while(IsWindow(search.window)) {
+        WINDOWPLACEMENT current={0};
+        if(capture_placement(search.window,&current) && !same_placement(&previous,&current)) {
+            save_placement(&current); previous=current;
+        }
         if(GetFileAttributesW(update_signal)!=INVALID_FILE_ATTRIBUTES)
             PostMessageW(search.window,WM_CLOSE,0,0);
         if(WaitForSingleObject(backend,300)==WAIT_OBJECT_0) return 1;
@@ -211,6 +272,7 @@ static DWORD wait_window(HANDLE backend, PROCESS_INFORMATION *edge) {
 }
 int WINAPI wWinMain(HINSTANCE instance,HINSTANCE prev,LPWSTR args,int show) {
     (void)prev; (void)args; (void)show;
+    SetProcessDpiAwarenessContext((HANDLE)(LONG_PTR)-4);
     WCHAR edge[MAX_PATH], wsl[MAX_PATH], cmd[2048]={0}, url[128], profile[MAX_PATH+1]={0};
     HANDLE child_in=NULL, input=NULL, output=NULL, child_out=NULL, writer=NULL;
     PROCESS_INFORMATION backend={0},app={0};

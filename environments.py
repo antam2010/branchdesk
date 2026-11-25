@@ -18,7 +18,7 @@ import uuid
 import zipfile
 
 execution_settings = ContextVar('execution_settings', default={})
-SOURCES = ('gitdesk.py', 'partial.py', 'workspace_ops.py', 'commit_ops.py', 'environments.py', 'process_utils.py')
+SOURCES = ('gitdesk.py', 'partial.py', 'workspace_ops.py', 'commit_ops.py', 'environments.py', 'process_utils.py', 'desktop_actions.py', 'updater.py', 'windows/desktop.ps1')
 
 
 def state_root():
@@ -131,6 +131,8 @@ def invoke(op, data, profile):
         if op == 'open': return str(gitdesk.repository(data['path']))
         if op == 'new': return str(workspace_ops.new_repository(data))
         root = gitdesk.repository(data.get('root', data.get('path')))
+        if op == 'locate-commit': return gitdesk.locate_commit(root, data['rev'], data.get('count', 150))
+        if op == 'switch-plan': return workspace_ops.switch_plan(root, data['name'])
         if op == 'state': return gitdesk.state(root, data.get('count', 150))
         if op == 'detail': return gitdesk.detail(root, data['rev'], data.get('base'))
         if op == 'diff': return gitdesk.diff(root, data)
@@ -138,6 +140,7 @@ def invoke(op, data, profile):
         if op == 'rebase-plan': return commit_ops.rebase_plan(root, data['rev'])
         if op == 'export': return commit_ops.export(root, data)
         if op == 'urls': return workspace_ops.remote_urls(root)
+        if op == 'remote-websites': return workspace_ops.remote_websites(root)
         if op in ('conflict', 'resolve'): return partial.conflict_file(root, data, resolve=op == 'resolve')
         if op in ('lines', 'lines-apply'): return partial.partial(root, data, apply=op == 'lines-apply')
         if op == 'action': return gitdesk.act(root, data)

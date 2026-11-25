@@ -26,6 +26,7 @@ const paths = {
   terminal: "M2 4h20v16H2z M6 8l4 4-4 4 M13 16h4",
   plus: "M12 5v14 M5 12h14",
   folder: "M3 6h7l2 3h9v11H3z",
+  settings: "M4 7h16 M4 17h16 M9 4v6 M15 14v6",
   remote: "M3 4h18v13H3z M8 21h8 M12 17v4",
   file: "M6 2h8l5 5v15H6z M14 2v6h5"
 };
@@ -108,7 +109,8 @@ async function exclusive(job) {
   }
 }
 function tool(k, label, disabled = false) {
-  return '<button class="tool" data-tool="' + k + '" ' + (disabled ? 'disabled' : '') + '>' + icon(k) + esc(label) + '</button>';
+  const title = ({remote: '원격 저장소 웹페이지를 기본 브라우저로 열기', settings: 'Git 원격 주소 추가·수정·관리', terminal: '현재 저장소의 터미널 열기', folder: '현재 저장소 폴더를 탐색기로 열기'})[k] || label;
+  return '<button title="' + esc(title) + '" class="tool" data-tool="' + k + '" ' + (disabled ? 'disabled' : '') + '>' + icon(k) + esc(label) + '</button>';
 }
 const environmentRepoPath = value => value?.startsWith('bd:') ? value.slice(value.indexOf(':', 3) + 1) : value;
 const environmentRepoName = value => environmentRepoPath(value)?.split(/[\\/]/).pop() || value;
@@ -116,7 +118,7 @@ function chrome() {
   $("#tabs").innerHTML = repos.map((p, i) => '<button class="repo-tab ' + (p === repo ? 'active' : '') + '" data-tab="' + i + '" title="' + esc(environmentRepoPath(p)) + '">' + icon("repo") + esc(environmentRepoName(p)) + '</button><button class="close-tab" data-close="' + i + '" aria-label="' + esc(p) + ' 탭 닫기">×</button>').join("") + '<button class="add-tab" id="add">' + icon("plus") + '저장소 열기</button>';
   const off = !s,
     remote = off || !s.remotes.length;
-  $("#toolbar").innerHTML = tool("commit", "커밋", off) + '<span class="separator"></span>' + tool("pull", "풀", remote) + tool("push", "푸시", remote) + tool("fetch", "페치", remote) + '<span class="separator"></span>' + tool("branch", "브랜치", off || !s.head) + tool("merge", "병합", off || !s.branch || !s.refs.some(r => r.group === "heads" && r.name !== s.branch)) + tool("stash", "스태시", off || !s.head || !s.changes.length) + tool("tag", "태그", off || !s.head) + tool("flow", "Git Flow", off || !s.head) + tool("remote", "원격", off) + tool("terminal", "터미널", off) + tool("folder", "탐색기", off) + '<span class="push-right"></span>' + tool("refresh", "새로고침", off);
+  $("#toolbar").innerHTML = tool("commit", "커밋", off) + '<span class="separator"></span>' + tool("pull", "풀", remote) + tool("push", "푸시", remote) + tool("fetch", "페치", remote) + '<span class="separator"></span>' + tool("branch", "브랜치", off || !s.head) + tool("merge", "병합", off || !s.branch || !s.refs.some(r => r.group === "heads" && r.name !== s.branch)) + tool("stash", "스태시", off || !s.head || !s.changes.length) + tool("tag", "태그", off || !s.head) + tool("flow", "Git Flow", off || !s.head) + tool("remote", "원격", remote) + tool("settings", "원격 설정", off) + tool("terminal", "터미널", off) + tool("folder", "탐색기", off) + '<span class="push-right"></span>' + tool("refresh", "새로고침", off);
   $("#go-log").innerHTML = icon("history") + "히스토리";
   $("#go-work").innerHTML = icon("files") + '파일 상태<span class="count">' + (s?.changes.length ?? 0) + '</span>';
   $("#go-log").className = mode === "history" ? "active-nav" : "";
@@ -283,6 +285,13 @@ async function loadDetail() {
 }
 let previewRequest;
 function patchHtml(patch) {
+  if (patch && typeof patch === 'object' && patch.type === 'file') {
+    const heading = '<div class="file-preview-heading">' + esc(patch.title || '파일 전체 내용') + '</div>';
+    if (patch.message) return heading + empty(patch.message);
+    if (patch.empty) return heading + empty('빈 파일입니다. 파일 내용이 없습니다.');
+    const lines = patch.text.split('\n'), shown = lines.slice(0, 3000);
+    return heading + '<div class="patch full-file-preview">' + shown.map((text, index) => '<div class="file-source-line"><span class="file-line-number">' + (index+1) + '</span><code>' + (esc(text) || ' ') + '</code></div>').join('') + '</div>' + (patch.truncated || lines.length>shown.length ? empty('미리보기 한도: 최대 192 KiB · 3,000줄까지 표시합니다.') : '');
+  }
   const lines = patch.split("\n"), shown = lines.slice(0, 3000);
   return patch ? '<div class="patch">' + shown.map(l => {
       const cls = /^(diff |index |--- |\+\+\+ |new file|deleted file|old mode|new mode)/.test(l) ? "pmeta" : l.startsWith("@@") ? "hunk" : l.startsWith("+") ? "plus" : l.startsWith("-") ? "minus" : "";
@@ -317,12 +326,13 @@ async function showDiff() {
       rev,
       base: waitingForEnd ? "" : compareBase,
       kind: f.kind,
+      code: f.code,
       path: f.path
     });
     const patch = await previewRequest;
     if (serial !== diffSeq || !pane.isConnected) return;
     pane.innerHTML = '<div class="subhead">' + icon("file") + '<span class="ellipsis" title="' + esc(f.path) + '">' + esc(f.path) +
-      '</span><button id="expand-diff">크게 보기</button>' + (mode === "work" ? '<button id="partial">' + (f.code === "U" ? '충돌 해결' : '줄 선택') + '</button>' : '') +
+      '</span><button id="expand-diff">크게 보기</button>' + (mode === "work" && !(patch?.type === 'file' && (patch.message || patch.empty)) ? '<button id="partial">' + (f.code === "U" ? '충돌 해결' : '줄 선택') + '</button>' : '') +
       '</div>' + patchHtml(patch);
   } catch (e) {
     if (serial === diffSeq && pane.isConnected) pane.innerHTML = empty(e.message);
@@ -414,7 +424,7 @@ async function mutation(op, more = {}) {
       ...more
     });
   } catch (error) {
-    if (["merge", "pull", "apply_stash", "stash_pop", "rebase", "cherry_pick", "flow_finish", "continue", "abort", "merge_commit", "rebase_commit", "revert_commit", "reorder_commits", "cherry_pick_commit"].includes(op)) {
+    if (["switch", "merge", "pull", "apply_stash", "stash_pop", "rebase", "cherry_pick", "flow_finish", "continue", "abort", "merge_commit", "rebase_commit", "revert_commit", "reorder_commits", "cherry_pick_commit"].includes(op)) {
       mode = "work";
       await refresh();
     }
@@ -442,6 +452,11 @@ async function mutation(op, more = {}) {
     switch: "브랜치를 전환했습니다."
   }[op] || (["stage", "unstage"].includes(op) ? "스테이징 상태를 변경했습니다." : "작업을 완료했습니다."));
 }
+async function openDesktop(op, path = repo) {
+  notice(op === 'terminal' ? '터미널 창을 여는 중…' : '탐색기 창을 여는 중…', true);
+  const result = await api('action', {repo: path, op});
+  notice(result?.message || '열기를 요청했습니다. 작업 표시줄을 확인하세요.');
+}
 function remoteAction(op) {
   if (op === "fetch") return fetchDialog();
   if (!s.branch) return notice("로컬 브랜치를 먼저 체크아웃하세요.", true);
@@ -465,6 +480,25 @@ function selectRev(id) {
   chrome();
   drawRows();
   loadDetail();
+}
+let referenceReveal = 0;
+async function revealReference(reference) {
+  const serial = ++referenceReveal, expectedRepo = repo, original = s;
+  if (!s.commits.some(commit => commit.id === reference.id)) {
+    notice(reference.name + '의 커밋 위치를 찾는 중…');
+    const located = await api('locate-commit', {rev: reference.id, count: limit});
+    const data = await api('state', {count: located.count});
+    if (serial !== referenceReveal || repo !== expectedRepo || s !== original) return;
+    if (data.head !== original.head || data.branch !== original.branch) return refresh();
+    s = data; limit = located.count;
+  }
+  if (serial !== referenceReveal || repo !== expectedRepo) return;
+  query = ''; compareBase = ''; waitingForEnd = false; mode = 'history'; rev = reference.id;
+  $('#go-log').className = 'active-nav'; $('#go-work').className = '';
+  // Keep sidebar button nodes alive so the second click can produce dblclick.
+  document.querySelectorAll('[data-ref]').forEach(button => button.classList.toggle('viewed-ref', s.refs[Number(button.dataset.ref)]?.name === reference.name && s.refs[Number(button.dataset.ref)]?.group === reference.group));
+  historyView();
+  document.querySelector('.logrow.selected')?.scrollIntoView({block: 'center', behavior: 'smooth'});
 }
 function clickAction(e) {
   const el = e.target.closest("button");
@@ -514,13 +548,9 @@ function clickAction(e) {
   if (["proceed", "abort"].includes(el.id)) return dialog(s.progress, info("진행 중인 " + s.progress + " 작업을 " + (el.id === "abort" ? "중단" : "계속") + "합니다."), "확인", () => mutation(el.id === "abort" ? "abort" : "continue"));
   if (d.tool === "tag") return tagDialog();
   if (d.tool === "flow") return flowDialog();
-  if (d.tool === "remote") return exclusive(remotesDialog);
-  if (d.tool === "terminal" || d.tool === "folder") return exclusive(async () => {
-    await api("action", {
-      op: d.tool === "folder" ? "explorer" : "terminal"
-    });
-    notice("열기를 요청했습니다.");
-  });
+  if (d.tool === "remote") return exclusive(openRemoteWebsite);
+  if (d.tool === "settings") return exclusive(remotesDialog);
+  if (d.tool === "terminal" || d.tool === "folder") return exclusive(() => openDesktop(d.tool === 'folder' ? 'explorer' : 'terminal'));
   if (el.id === "go-log") return switchMode("history");
   if (el.id === "go-work") return switchMode("work");
   if (el.id === "more") {
@@ -552,17 +582,8 @@ function clickAction(e) {
   if (["fetch", "pull", "push"].includes(d.tool)) return remoteAction(d.tool);
   if (d.ref !== undefined) {
     const r = s.refs[Number(d.ref)];
-    if (r.group === "heads" && r.name !== s.branch) return dialog("브랜치 전환", '<p>' + esc(r.name) + ' 브랜치를 체크아웃합니다.</p>', "체크아웃", () => mutation("switch", {
-      name: r.name
-    }));
-    query = "";
-    if ($("#search")) $("#search").value = "";
-    compareBase = "";
-    waitingForEnd = false;
-    selectRev(r.id);
-    document.querySelector('.logrow.selected')?.scrollIntoView({
-      block: "nearest"
-    });
+    if (e.detail > 1) return;
+    revealReference(r).catch(error => notice(error.message, true));
     return;
   }
   if (d.rev) {
@@ -615,6 +636,12 @@ function clickAction(e) {
 document.addEventListener("click", clickAction);
 $("#diff-popup").addEventListener("close", () => $("#popup-patch").replaceChildren());
 document.addEventListener("dblclick", event => {
+  const button = event.target.closest('button[data-ref]');
+  if (button && !busy && !document.querySelector('dialog[open]')) {
+    const ref = s.refs[Number(button.dataset.ref)];
+    if (ref?.group === 'heads') exclusive(() => branchSwitchDialog(ref.name));
+    return;
+  }
   if (!busy && event.target.closest("button[data-file]")) expandDiff();
 });
 document.addEventListener("input", e => {

@@ -97,6 +97,15 @@ def state(root, count):
                 remotes=line(git(root, "remote")).splitlines())
 
 
+def locate_commit(root, rev, count=150):
+    verify_commit(root, rev)
+    args = ['log', '--branches', '--remotes', '--tags', '--topo-order', '--format=%H', '-n', '5000']
+    if has_head(root): args.append('HEAD')
+    ids = line(git(root, *args, '--')).splitlines()
+    if rev not in ids: raise GitError('이 커밋은 최근 5,000개 이력에 없습니다. Git 로그 범위를 확인하세요.')
+    return dict(count=max(int(count), min(5000, ids.index(rev)+40)), rev=rev)
+
+
 def verify_commit(root, rev):
     if not isinstance(rev, str) or not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", rev):
         raise GitError("커밋 ID를 확인해 주세요.")
@@ -129,6 +138,43 @@ def valid_path(path):
     return isinstance(path, str) and bool(path) and "\x00" not in path and not Path(path).is_absolute() and not Path(path).drive and ".." not in Path(path).parts
 
 
+def file_preview(root, path, *, source='work', rev=None, title='파일 전체 내용'):
+    """Read the selected version, never substitute the worktree for the index/commit."""
+    if not valid_path(path): raise GitError('파일 경로가 올바르지 않습니다.')
+    truncated = False
+    if source == 'work':
+        file = root / path
+        if file.is_symlink():
+            raw = os.fsencode(os.readlink(file)); size = len(raw)
+        elif file.is_file():
+            with file.open('rb') as stream: raw = stream.read(DIFF_LIMIT+1)
+            size = file.stat().st_size; truncated = len(raw)>DIFF_LIMIT
+            raw = raw[:DIFF_LIMIT]
+        else: return dict(type='file', message='파일이 삭제되었거나 일반 파일이 아닙니다.', title=title)
+    else:
+        if source == 'index':
+            records = fields(git(root, 'ls-files', '--stage', '-z', '--', path))
+            candidates = [row.split('\t',1)[0].split()[1] for row in records if row.split('\t',1)[1]==path and row.split('\t',1)[0].split()[2]=='0']
+        else:
+            verify_commit(root, rev)
+            records = fields(git(root, 'ls-tree', '-z', rev, '--', path))
+            candidates = [row.split('\t',1)[0].split()[2] for row in records if row.split('\t',1)[1]==path and row.split('\t',1)[0].split()[1]=='blob']
+        if not candidates: return dict(type='file', message='이 버전에 파일 내용이 없습니다. 삭제 또는 서브모듈 여부를 확인하세요.', title=title)
+        blob = candidates[0]
+        if line(git(root, 'cat-file', '-t', blob)) != 'blob':
+            return dict(type='file', message='서브모듈은 파일 내용 대신 연결된 커밋을 관리합니다.', title=title)
+        size = int(line(git(root, 'cat-file', '-s', blob)))
+        raw = git(root, 'cat-file', 'blob', blob, limit=DIFF_LIMIT, preview=True)
+        truncated = size>DIFF_LIMIT
+        raw = raw[:DIFF_LIMIT]
+    if raw.startswith((b'\xff\xfe', b'\xfe\xff')):
+        text = raw.decode('utf-16', errors='replace')
+    elif b'\0' in raw:
+        return dict(type='file', message='바이너리 파일입니다. 텍스트 미리보기를 지원하지 않습니다.', size=size, title=title)
+    else: text = raw.decode('utf-8-sig', errors='replace')
+    return dict(type='file', text=text, empty=size==0, truncated=truncated, size=size, title=title, source=source)
+
+
 def diff(root, data):
     kind, path = data.get("kind"), data.get("path")
     if not valid_path(path):
@@ -137,23 +183,21 @@ def diff(root, data):
     if kind == "commit":
         rev = data.get("rev")
         ends = endpoints(root, rev, data.get("base"))
+        if data.get('code') == 'A':
+            return file_preview(root, path, source='commit', rev=rev, title='새 파일 · 커밋의 전체 내용')
         args = ["diff-tree", "--no-commit-id", "-p", *options, *ends, "--", path]
     elif kind in ("index", "work"):
         item = next((f for f in changes(root, path) if f["path"] == path), None)
         if not item:
-            return ""
-        if item["x"] == "?" and kind == "work":
-            entry = root / path
-            if entry.is_dir() and not entry.is_symlink():
-                return "별도 Git 저장소 디렉터리"
-            if not entry.is_symlink() and not entry.is_file():
-                return "이 파일 형식은 미리보기를 지원하지 않습니다."
-            args = ["diff", "--no-index", *options, "--", os.devnull, path]
+            return file_preview(root, path, source=kind, title='변경 비교 없음 · 파일 전체 내용')
+        if (item['x'] == '?' and kind == 'work') or (item['x'] == 'A' and kind == 'index'):
+            return file_preview(root, path, source=kind, title='새 파일 · 전체 내용')
         else:
             args = ["diff", *options, *(["--cached"] if kind == "index" else []), "--", path]
     else:
         raise GitError("비교 대상을 확인해 주세요.")
-    return git(root, *args, allowed=(0, 1), limit=DIFF_LIMIT, preview=True).decode(errors="replace")
+    patch = git(root, *args, allowed=(0, 1), limit=DIFF_LIMIT, preview=True).decode(errors='replace')
+    return patch or file_preview(root, path, source='commit' if kind=='commit' else kind, rev=data.get('rev'), title='변경 비교 없음 · 파일 전체 내용')
 
 
 def act(root, d):
@@ -188,7 +232,8 @@ def act(root, d):
             args = ["switch", "-c"] if d.get("checkout", True) else ["branch"]
             git(root, *args, name, rev or "HEAD")
         else:
-            git(root, "switch", name)
+            from workspace_ops import switch_branch
+            switch_branch(root, d)
     elif op == "merge":
         name = d.get("name", "")
         if not current(root):
@@ -234,4 +279,4 @@ def act(root, d):
         if op in ACTIONS:
             return commit_operate(root, d)
         from workspace_ops import operate
-        operate(root, d)
+        return operate(root, d)

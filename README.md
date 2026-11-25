@@ -1,165 +1,153 @@
 # Branchdesk
 
-Windows와 WSL 저장소를 환경별 Git으로 관리하는 한국어 Git GUI. Windows 저장소는 Windows Git, WSL 저장소는 해당 배포판의 Git과 Python으로 처리한다. 화면은 Windows의 Edge 앱 창에서 열린다.
+**English** · [한국어](README.ko.md) · [日本語](README.ja.md)
 
-## Windows에서 더블클릭으로 실행
+A local Git GUI for Windows and WSL. Manage Windows repositories with Windows Git and WSL repositories with the selected distribution's Git in the same application. The application UI is currently in Korean; this guide includes the button labels used in the app.
 
-Windows 11 x64에서 `Branchdesk.exe`를 더블클릭한다. EXE에는 서버·화면·아이콘·설치 도우미가 들어 있으므로 다른 소스 파일을 함께 둘 필요가 없다. Python 3.9 이상, Git 2.28 이상, Microsoft Edge가 필요하다.
+## Start on Windows
 
-| PC 상태 | 실행 방식 |
+Double-click `Branchdesk.exe` on Windows 11 x64. The executable contains the application, web assets, icon, and setup helpers. It requires Microsoft Edge, Python 3.9+, and Git 2.28+ in the environment doing the Git work. No frontend build or third-party Python package is needed to run the app.
+
+| Your setup | How to start |
 | --- | --- |
-| 기존 WSL 사용자의 배포판이 준비됨 | 이전처럼 기본 WSL 환경으로 실행 |
-| WSL이 없거나 시작 환경을 새로 준비함 | Windows Python·Git 경로를 선택하여 WSL 없이 실행 |
-| Windows Python·Git이 없음 | 시작 화면의 **앱 전용 폴더에 설치**로 WinGet 설치 후 연결 |
-| WSL 방식을 원함 | 시작 화면의 **WSL 방식 사용** 선택. 기존 Ubuntu/Debian 준비 도우미 사용 |
+| An existing, working WSL distribution | Continue with the default WSL environment |
+| Windows without WSL | Select Windows Python and Git executables in the startup helper |
+| Windows Python or Git is missing | Use **앱 전용 폴더에 설치** (install in the app's tools folder) |
+| You prefer WSL | Select **WSL 방식 사용** and follow the Ubuntu/Debian setup helper |
 
-Windows 기본 설치 폴더는 `%LOCALAPPDATA%\Branchdesk\tools`이며 Python은 `python\python.exe`, Git은 `git\cmd\git.exe`를 연결한다. 기존 설치가 있으면 실제 실행 파일을 직접 선택한다. WinGet이 이미 설치된 프로그램을 발견하면 새 위치로 복제하지 않을 수 있으므로 기존 경로를 연결하면 된다. WinGet은 Microsoft Store의 **앱 설치 관리자**가 제공하며 패키지 매니페스트의 설치 파일 해시를 검증한다. Edge는 Windows 기본 설치 또는 공식 배포판을 사용한다.
+The default Windows tools directory is `%LOCALAPPDATA%\Branchdesk\tools`: Python at `python\python.exe`, Git at `git\cmd\git.exe`. Windows installations use WinGet and its package-manifest hash verification. WinGet comes with Microsoft's **App Installer**. If a package is already installed elsewhere, connect its existing executable instead of expecting WinGet to duplicate it in a new directory.
 
-WSL 설치 시 관리자 승인·재부팅·Linux 계정 생성은 사용자 안내에 따라 진행한다. WSL 자동 패키지 설치는 Ubuntu/Debian 계열만 지원한다. 기존 배포판을 교체하거나 기본 배포판을 바꾸지 않는다.
+Automatic WSL package installation supports Ubuntu/Debian. Initial WSL installation may require administrator approval, a restart, and creation of a Linux account. The helper does not replace an existing distribution or change the default one. Edge must be installed on Windows.
 
-### 실행 환경과 프로그램 경로
+### Connect Windows and WSL2 environments
 
-상단 **실행 환경 → 실행 환경 추가**를 누르고 **Windows** 또는 **WSL2**를 선택한 뒤 **이 환경 연결하기**를 누른다. Python·Git은 해당 환경에서 자동으로 찾고 버전을 검사한다. WSL2는 배포판 이름을 지정하거나 기본 배포판을 사용할 수 있다. 자동 검색이 실패하거나 특정 버전이 필요하면 **프로그램 경로 직접 지정**을 펼쳐 경로를 입력한다. 등록된 목록에는 실제 Windows/WSL2 종류와 배포판을 표시한다. 기본 환경의 기존 ID와 저장소 연결은 유지한다.
+1. Open **실행 환경** (execution environments).
+2. Click **＋ 실행 환경 추가** (add environment).
+3. Choose **Windows** or **WSL2**. Enter a name and, optionally, a WSL distribution name.
+4. Click **이 환경 연결하기** (connect this environment). The app discovers Python/Git and checks their versions.
+5. Use **프로그램 경로 직접 지정** (set executable paths) if discovery fails or you need a specific installation.
 
-**저장소 열기**에서 Windows·WSL2 환경과 폴더를 선택한다. 환경 선택 옆 **실행 환경 추가**로 등록한 뒤 돌아와도 입력 중인 클론 주소·폴더를 유지한다. Windows 환경에는 `C:\projects\my-app`, WSL 환경에는 `~/projects/my-app` 또는 `/home/...`를 입력한다. 각 탭은 실행 환경과 경로를 함께 기억한다. Windows 경로의 파일 처리는 Windows Python이, Linux 경로는 해당 WSL Python이 수행한다. Git·Python 경로는 앱 설정으로 저장하며 시스템 PATH나 전역 Git 설정을 바꾸지 않는다. 도구 설치를 직접 선택하면 설치 프로그램 자체가 PATH 등을 등록할 수 있다.
+The list shows the actual platform and distribution rather than an ambiguous “current OS.” Native Linux source launches also offer a Linux environment. Existing profile IDs and repository connections are preserved.
 
-**필요한 프로그램 설치**를 펼치면 Windows 설치 폴더를 직접 정하거나 WSL 배포판에 Python·Git·OpenSSH를 설치할 수 있다. 기존 설치를 이동하거나 제거하지 않는다. 설치 완료 후 **변경 사항 저장**으로 경로를 연결한다. Windows와 WSL을 함께 쓸 때 WSL의 Windows 프로그램 실행 연동과 설치된 배포판이 필요하다.
+In **저장소 열기** (open repository), choose an environment and enter its native path:
 
-저장한 환경의 **앱 시작 설정 (고급) → 이 환경에서 앱 시작하기**를 누르면 다음 EXE 실행에서 Windows 단독 또는 기본 WSL로 시작한다. 다른 WSL 배포판은 저장소 실행 환경으로 연결한다. 앱 시작 OS를 바꾸면 도구 설정과 탭 참조를 대상 사용자 상태 폴더에 병합하며, 키 파일이나 저장소 파일은 복사하지 않는다.
+| Environment | Example path |
+| --- | --- |
+| Windows | `C:\projects\my-app` or `C:/projects/my-app` |
+| WSL2 | `~/projects/my-app` or `/home/user/projects/my-app` |
 
-Windows 상태 파일은 `%LOCALAPPDATA%\Branchdesk\state`, WSL/Linux 상태 파일은 `~/.local/state/branchdesk`에 둔다. WSL/Linux에서는 `XDG_STATE_HOME`도 따른다. 환경별 Git 사용자 이름·이메일·인증·줄바꿈 설정은 각각 독립적이다. 같은 작업 트리에 Windows Git과 WSL Git을 동시에 실행하지 않는 것이 좋다. 저장소의 `.gitattributes`로 줄바꿈 기준을 정하면 환경별 차이를 줄일 수 있다.
+The add-environment button in the repository dialog lets you add a missing environment and return without losing the clone URL or folder you typed. Each repository tab remembers its environment. Git/Python paths are app settings; selecting them does not change global Git settings or the system PATH. Installers may register their own PATH entries when you explicitly install tools.
 
-### SSH 키 연결과 생성
+Expand **Git·Python이 없나요? 프로그램 설치** to install missing tools. Windows accepts a user directory; WSL uses the selected distribution's package manager. After installation, connect or save the environment.
 
-환경별 **SSH 키 연결 · 관리 → SSH 개인키 경로**를 지정한다. **SSH 키 관리 → 기존 키 찾기**로 기본 `.ssh` 폴더의 키를 선택하거나 직접 경로를 입력한다. **공개키 보기/복사**로 서비스 계정의 SSH Keys에 등록할 공개키만 확인한다. 개인키 내용은 화면이나 API 응답으로 전달하지 않는다. 선택한 키는 해당 환경의 Git 호출에만 적용하고 `~/.ssh/config`나 전역 Git 설정은 수정하지 않는다. 키 경로를 비우면 기존 Git/SSH 설정과 인증 수단을 사용한다.
+**앱 시작 설정 (고급)** changes the Python environment that starts the EXE on its next launch. This is separate from each repository's Git environment and normally needs no change. Switching the host OS merges profile and tab references into the destination state directory; repository and private-key files are not copied. App startup uses Windows or the default WSL distribution; other distributions remain available for repository work.
 
-**새 Ed25519 키 생성**은 `~/.ssh/branchdesk-이름/id_ed25519`에 새 키를 만든다. 같은 이름의 폴더가 있으면 중단하여 기존 키를 덮어쓰지 않는다. 앱에서 직접 생성하는 키는 **암호 없는 개인키로 생성**을 선택해야 한다. 암호를 설정하려면 해당 환경의 터미널에서 `ssh-keygen -t ed25519`로 만든 뒤 연결하고, `ssh-add`로 해당 환경의 에이전트에 등록한다. WSL/Linux 에이전트 소켓이 앱에 상속되지 않으면 환경 설정의 **ssh-agent 소켓**을 지정한다. Windows OpenSSH는 Windows의 에이전트 서비스를 사용한다. Windows와 WSL의 에이전트는 별개다.
+Git identity, credentials, line endings, and SSH agents are separate between Windows and WSL. Prefer one Git environment per worktree and use `.gitattributes` to define shared line-ending rules.
 
-**저장된 SSH 설정으로 인증 확인**은 GitHub·GitLab.com·Bitbucket을 지원한다. 미등록 호스트의 키는 자동 승인하지 않는다. 해당 환경에서 `ssh -T git@github.com` 등을 실행하고 공식 호스트 지문을 확인한 뒤 연결한다. 사내 Git 서버와 별도 포트는 터미널에서 확인한다. 공개키를 서비스에 등록하는 작업은 사용자가 진행한다.
+### SSH keys
 
-EXE는 Windows의 `127.0.0.1`에서만 연결을 받고, 선택한 Python 프로세스와 바이너리 표준 입출력 파이프로 통신한다. WSL localhost 포트 전달은 필요하지 않다. 전용 창을 닫으면 서버는 접수된 Git 작업을 마친 뒤 종료한다. 창마다 별도 임시 Edge 프로필을 사용한다.
+Expand **SSH 키 연결 · 관리** in a saved environment. Select an existing private-key path, or use **기존 키 찾기** to find keys in that environment's `.ssh` directory. **공개키 보기/복사** displays or copies only the public key for registration in your Git service account. Save with **SSH 설정 저장**. The app does not return private-key contents, edit `~/.ssh/config`, or change global Git configuration. Leaving the key blank keeps existing Git/SSH authentication.
 
-### 앱에서 업데이트
+New Ed25519 keys are created in `~/.ssh/branchdesk-NAME/id_ed25519`. Existing directories are never overwritten. App-generated keys require explicitly selecting the unencrypted-key checkbox. To use a passphrase, generate the key in that environment's terminal with `ssh-keygen -t ed25519`, connect it, and unlock it with `ssh-add`. For WSL/Linux, specify an agent socket if `SSH_AUTH_SOCK` is not inherited by the app. Windows OpenSSH uses the Windows agent service.
 
-이 업데이트 기능을 처음 받는 한 번은 앱을 종료하고 `git pull`한 뒤 새 EXE를 실행한다. 이후에는 창 오른쪽 위의 **앱 업데이트 → 새 버전 받기 → 적용 후 재시작**을 사용한다.
+Authentication checks support GitHub, GitLab.com, and Bitbucket. Unknown host keys are not automatically accepted. Run the appropriate `ssh -T git@HOST` command in the selected environment, verify the service's published host fingerprint, and register your public key yourself. Use a terminal for private servers or custom connection details.
 
-- 버전 확인과 다운로드는 백그라운드에서 진행한다. 창을 닫아두고 Git 작업을 계속할 수 있다.
-- **적용 후 재시작**을 누르면 파일 검증과 Windows 도우미 준비를 마친 뒤 현재 앱 창이 닫히고 새 버전이 자동으로 열린다. 열어둔 저장소·마지막 저장소와 작성 중인 커밋 메시지를 복원한다. Windows/WSL 시작 환경을 바꿔도 업데이트 복원 정보는 Windows 사용자 폴더의 공통 위치를 통해 이어받는다.
-- GitHub `antam2010/branchdesk`의 `main`에 있는 EXE를 커밋과 파일 해시에 고정해 받는다. 받은 파일의 Git blob 해시와 Windows 설치 시 SHA-256을 확인한다.
-- 앱 업데이트는 작업 폴더에 `git pull`하지 않는다. README·소스·Git 작업 내용·기존 EXE를 덮어쓰지 않고 `%LOCALAPPDATA%\Branchdesk\versions`에 새 앱을 준비한다. 기존 실행 파일로 다음에 열어도 설치된 새 버전으로 연결한다. 수동으로 `git pull`해 새 EXE를 받은 경우에는 그 실행 파일을 우선 사용한다.
-- 네트워크 오류·파일 검증 실패·도우미 시작 실패 시 현재 앱을 유지한다. 다운로드한 버전을 적용하지 않고 기존 앱을 계속 사용할 수 있다.
-- Windows EXE 실행이 필요하며, WSL 호스트에서는 Windows 프로그램 실행 연동도 필요하다. `python3 branchdesk.py` 실행에서는 자동 업데이트를 적용하지 않는다. 기존 프로그램의 설치된 버전을 관리하므로 앱을 새로 빌드해 배포할 때는 EXE도 함께 커밋해야 한다.
+## Everyday work
 
-### EXE를 소스에서 빌드
+| Action | Behavior |
+| --- | --- |
+| Repository tabs | Open, clone, or initialize repositories; restore tab order and the active tab on restart; reopen recent repositories |
+| Single-click a branch | Select its commit and scroll the graph there, without checking it out; load more history if needed, within the 5,000-commit limit |
+| Double-click a local branch | Open **브랜치 변경 확인** (confirm branch change) before checkout |
+| Clean checkout | Off by default. Explicitly selecting **청소** discards the listed modifications, staged changes, and new files. Ignored files and nested Git repositories remain. A changed confirmation snapshot is rejected |
+| File status and commits | Stage or unstage whole files or selected text changes; commit or amend the latest commit |
+| New files | Show the complete selected text version with line numbers, even without an old file to compare. Index previews read staged content; commit previews read that commit. Empty files, binary content, and limits get explicit messages |
+| History and comparison | Inspect commits, compare two selected commits, and view files as a list or folder tree. Double-click a file to expand its preview |
+| Remote webpage | **원격** opens the repository webpage in the default browser. SSH/HTTPS Git URLs are converted to web URLs with credentials removed. Select a remote when several web destinations exist. Local-path remotes have no webpage |
+| Remote settings | **원격 설정** views/copies fetch and push URLs, adds or edits remotes, and removes connections |
+| Fetch, pull, push | Choose a remote/branch; optional prune/tags for fetch; fast-forward-only pull by default, with merge/rebase alternatives; push sets upstream |
+| Branches and tags | Create/rename/delete merged local branches, track a remote branch, rebase, create/delete tags, and push a selected tag |
+| Stashes and conflicts | Save changes, apply/pop/drop stashes, resolve conflicts by editing or choosing a side, and continue/abort operations |
+| Terminal and Explorer | Open the selected repository's Windows/WSL terminal or folder; use a new Windows Terminal window when available, with PowerShell fallback; reuse an Explorer window for the same folder |
+| Window activation feedback | Restore and activate the opened window. If Windows denies activation, flash the located window's taskbar button and show an app message to help you find it |
+| External changes | Use **새로고침** (refresh) after working in another editor or terminal |
 
-Windows에서 Visual Studio의 **x64 Native Tools Command Prompt**를 열고 프로젝트 폴더에서 다음 명령을 실행한다. C++ 데스크톱 개발 도구와 Windows용 Python 3이 필요하다.
+A regular branch switch lets Git carry compatible local changes and refuses conflicting ones. Clean checkout is destructive: review its file list before confirming.
 
-```bat
-py -3 windows/build.py
-```
+File previews support UTF-8 and BOM-marked UTF-16, up to 192 KiB and 3,000 displayed lines, with a truncation message. Line staging supports UTF-8 regular text files up to 256 KiB and 5,000 lines per version. History starts with 150 commits and loads up to 5,000. Search covers loaded commits. Renames appear as delete/add entries.
 
-빌드 결과는 `dist/Branchdesk.exe`다. Linux에서는 MinGW-w64의 `x86_64-w64-mingw32-gcc`와 `x86_64-w64-mingw32-windres`가 설치된 환경에서 `python3 windows/build.py`로 빌드한다.
+### Menus, layout, and Git Flow
 
-## 소스에서 실행 (Windows·WSL·Linux)
+The app replaces browser right-click menus with desktop-style menus for commits, branches, tags, files, tabs, and editable text. Submenus support hover and arrow keys; Shift+F10 opens a menu, Enter activates, and Esc closes it. Text fields support copy/cut/paste/select-all/undo; use Ctrl+V if browser clipboard permission is unavailable. F5 refreshes the repository instead of reloading the page.
 
-실행할 OS에 Python 3.9 이상과 Git 2.28 이상이 필요하다. Windows에서는 `python branchdesk.py`, WSL/Linux에서는 아래 명령을 사용한다. 별도 패키지 설치나 프론트엔드 빌드 과정은 없다.
+Drag pane separators or focus them and use arrow keys to resize. Window position, size, and maximized state are stored outside the temporary Edge profile and restored on restart and app updates. Closing while minimized restores the previous normal/maximized state on the next launch. Windows adjusts off-screen placement after monitor changes.
 
-1. 저장소를 clone 또는 pull한 뒤 WSL 터미널에서 `branchdesk.py`가 있는 폴더로 이동한다.
-2. 다음 명령으로 실행한다.
+Commit menus include detached checkout, merge/rebase onto a selected commit, branch/tag creation, revert/cherry-pick with mainline selection, reset, archive/patch export, SHA copy, and external diff. Hard reset requires typing `HARD`. Reordering supports pick/squash/fixup/drop for a clean, linear local history with up to 100 commits after the selected base. Archives/patches are limited to 12 MiB; merge commits cannot be exported as a single format-patch. External comparison uses that environment's configured `diff.tool` (Ctrl+D).
 
-   ```bash
-   python3 branchdesk.py
-   ```
+For Git Flow, configure production/development branches in **Git Flow**, then start `feature`, `release`, or `hotfix` work. Features start from and finish into development. Releases/hotfixes finish into both branches and create a version tag. Finishing prepares merges in a temporary worktree and publishes refs in one Git transaction; conflicts stop before destination refs are updated. Push branches/tags separately.
 
-3. 열리는 Windows 브라우저에서 **저장소 열기**를 누르고 기존 저장소 경로를 입력한다. 브라우저가 자동으로 열리지 않으면 터미널에 표시된 주소 전체를 복사한다. 터미널에서 Ctrl+C를 누르면 종료된다.
+## App updates
 
-실행할 때 저장소를 지정하면 바로 히스토리를 연다. 여러 경로를 주면 각각 탭으로 열린다. 다음 경로는 예시다.
+Use **앱 업데이트 → 새 버전 받기 → 적용 후 재시작**. If your old EXE predates the updater, close it, `git pull` once, and run the new EXE first.
+
+The updater compares the current EXE with `Branchdesk.exe` on this repository's `main`, downloads a commit-pinned blob in the background, verifies its Git blob hash and Windows executable format, then checks SHA-256 when caching it in Windows. Applying saves tabs and commit-message drafts, closes the current app, and launches the new EXE. Resume data is shared across Windows/WSL host changes.
+
+New versions live under `%LOCALAPPDATA%\Branchdesk\versions\<hash>\Branchdesk.exe`. A pointer redirects a recognized older launcher to the cached version on later launches. A newly pulled, unrecognized EXE takes priority. Download/helper verification failures leave the current app available.
+
+**App update does not run `git pull`.** It updates the runnable app, leaving your checkout, README, local edits, and original EXE in place. Run `git pull` separately to update source files. Tool installations are managed separately. Automatic application requires the Windows EXE; source-mode launches do not apply executable updates.
+
+## Run from source and build
 
 ```bash
-python3 branchdesk.py ~/projects/landing-v2 ~/projects/cms-care
+python3 branchdesk.py
+python3 branchdesk.py ~/projects/project-a ~/projects/project-b
+python3 branchdesk.py --no-browser
 ```
 
-앱을 `~/tools/branchdesk`에 두었다면 아래 한 줄을 `~/.bashrc`에 추가하고 터미널을 다시 열어 어느 저장소에서나 `branchdesk .`으로 실행할 수 있다.
+On Windows, use `python` instead of `python3` as appropriate. Open the complete local URL printed in the terminal if the browser does not open automatically. Ctrl+C stops the source server. The Python runtime uses only the standard library plus your Git executable.
+
+To make a WSL/Linux command available from other folders, adapt this alias in `~/.bashrc`:
 
 ```bash
 alias branchdesk='python3 "$HOME/tools/branchdesk/branchdesk.py"'
 ```
 
-브라우저 자동 실행을 끄거나 포트를 지정할 때는 `--no-browser`, `--port 8765`를 사용한다. 기본 설정은 사용 가능한 포트를 자동 선택한다. 접속 키는 실행할 때 새로 발급되므로 새로 시작한 세션에는 터미널에 표시된 주소를 사용한다.
+Build in a Visual Studio **x64 Native Tools Command Prompt** with C++ desktop build tools and Windows Python installed:
 
-## 주요 작업
+```bat
+py -3 windows/build.py
+```
 
-| 화면 | 사용법 |
+Output: `dist/Branchdesk.exe`. On Linux with MinGW-w64 GCC and windres installed, run `python3 windows/build.py`. Commit the rebuilt root `Branchdesk.exe` when distributing a source change through app updates.
+
+## Local state and transport
+
+| Data | Location |
 | --- | --- |
-| 저장소 탭 | **저장소 열기**에서 기존 폴더 열기, 빈 저장소 생성, 원격 클론을 선택한다. 앱을 다시 열면 저장소 탭의 순서와 마지막으로 선택한 탭이 복원된다. ×로 닫은 탭은 복원 목록에서 빠진다. 한 번 연 저장소는 시작 화면과 **저장소 열기 → 최근 저장소**에 남으며, 이름이나 경로를 클릭해 다시 열 수 있다. 사용자 상태 폴더의 `tabs.json`에 실행 환경과 경로를 저장한다. |
-| 히스토리 | 커밋을 누르면 변경 파일과 파일별 diff가 열린다. 일반 병합 커밋은 첫 번째 부모 기준으로 표시한다. 사이드바·그래프·파일 목록의 경계선을 드래그하거나 경계선에 포커스를 두고 방향키로 크기를 조절한다. 변경 파일은 목록 또는 폴더 트리로 볼 수 있고, 파일을 더블클릭하면 큰 diff 창이 열린다. Esc로 닫는다. |
-| 커밋 오른쪽 클릭 | 체크아웃·병합·재배치·태그·ZIP 아카이브·브랜치 생성·자식 커밋 정리·초기화·되돌리기·패치·체리픽·SHA 복사를 실행한다. 우클릭한 커밋이 작업 대상이며, 실행할 수 없는 항목은 비활성화되고 마우스를 올리면 이유가 표시된다. Shift+F10/메뉴 키, 방향키, Enter, Esc도 사용할 수 있다. |
-| 두 커밋 비교 | 그래프에서 A를 클릭하고 Ctrl 또는 Shift를 누른 채 B를 클릭한다. 마우스만 쓸 때는 A 선택 → **비교 시작점 지정** → B 선택. 하단에 A → B의 변경 파일이 표시되고, 파일을 누르면 해당 diff를 읽을 수 있다. 비교는 두 시점의 최종 트리 기준이다. 중간에 바뀌었다 원복된 파일은 표시되지 않는다. |
-| 파일 상태·커밋 | 파일 옆 +·−로 스테이징하거나 해제한다. **줄 선택**에서는 현재 인덱스를 기준으로 선택한 변경 줄만 적용한다. **마지막 커밋 수정**으로 HEAD의 메시지와 내용을 수정할 수 있다. |
-| 브랜치 | **브랜치**에서 생성·체크아웃·이름 변경·병합된 로컬 브랜치 삭제·원격 추적 브랜치 생성·리베이스를 선택한다. 생성 시 현재 HEAD 또는 그래프에서 선택한 커밋을 시작점으로 지정할 수 있다. |
-| 병합·체리픽·충돌 | 병합은 상단 **병합**, 체리픽은 그래프에서 커밋을 선택한 뒤 **체리픽**. 충돌 파일을 선택하면 **충돌 해결**에서 직접 편집하거나 현재 쪽·상대 쪽 내용을 채택할 수 있다. 진행 중인 작업은 파일 상태에서 **계속** 또는 **중단**한다. 병합 커밋의 체리픽은 첫 부모 기준이다. |
-| 태그 | 왼쪽 목록에서 태그가 가리키는 커밋을 확인한다. 상단 **태그**에서 선택한 커밋에 경량 태그를 만들거나 로컬 태그 삭제·선택 태그 푸시를 실행한다. |
-| 원격 | **원격**에서 등록된 원격의 페치·푸시 주소를 각각 확인하거나 선택해 복사한다. 원격 추가·주소 수정·연결 제거를 지원한다. |
-| 페치 | 전체 원격 또는 특정 원격을 선택한다. **리모트에서 제거된 브랜치 정리하기**는 `--prune`, **모든 태그 가져오기**는 `--tags`를 전달한다. 체크하지 않은 옵션은 해당 저장소의 Git 설정을 따른다. |
-| 풀·푸시 | 원격과 브랜치를 지정한다. 풀의 기본값은 fast-forward이며 병합·리베이스도 선택할 수 있다. 푸시는 선택한 원격 브랜치를 업스트림으로 설정한다. |
-| 스태시 | 상단 **스태시**에서 인덱스·작업 트리 변경과 새 파일을 보관한다. 왼쪽 보관본을 누르면 적용, 성공 후 제거(pop), 삭제(drop)를 선택할 수 있다. |
-| 터미널·탐색기 | 현재 저장소 경로에서 Windows PowerShell 또는 WSL 터미널·탐색기를 연다. 터미널은 Windows Terminal(`wt.exe`)을 직접 실행한다. WSL의 Windows 실행 파일 연동이 필요하다. 일반 Linux 데스크톱에서는 `x-terminal-emulator`와 `xdg-open`을 사용한다. |
-| 외부 변경 반영 | 편집기나 터미널에서 작업한 뒤 우측 상단 **새로고침**을 누른다. |
+| Windows profiles/tabs | `%LOCALAPPDATA%\Branchdesk\state` |
+| WSL/Linux profiles/tabs | `~/.local/state/branchdesk`, or the `XDG_STATE_HOME` equivalent |
+| Window position/size/maximized state | `%LOCALAPPDATA%\Branchdesk\window.bin` |
+| EXE versions and update pointer | `%LOCALAPPDATA%\Branchdesk\versions` and `current.json` |
+| Desktop update resume data | `%LOCALAPPDATA%\Branchdesk\resume-ui.json` |
 
-### 커밋 메뉴
+The EXE listens only on Windows loopback. Authenticated HTTP requests travel over private binary pipes to the selected Python environment; WSL localhost forwarding is not required. Each window has an isolated temporary Edge profile. Closing the app allows accepted Git work to finish before backend shutdown.
 
-앱 화면 전체에서 브라우저 기본 우클릭 메뉴 대신 Windows 스타일의 앱 전용 메뉴를 표시한다. 커밋은 이력 작업, 사이드바 브랜치·태그는 참조 작업, 파일은 비교·스테이징, 저장소 탭은 전환·닫기·터미널·탐색기 메뉴를 제공한다. 빈 영역에서는 새로고침·저장소 열기·화면 전환을 사용할 수 있다.
-
-입력창과 커밋 메시지 영역에서는 복사·잘라내기·붙여넣기·전체 선택·실행 취소 메뉴를 제공한다. 붙여넣기 시 클립보드 접근이 차단되면 Ctrl+V를 사용할 수 있다. 하위 메뉴는 마우스를 올리거나 오른쪽 방향키를 누르면 옆에 열리며, 왼쪽 방향키·Esc로 닫는다. 화면 가장자리에서는 메뉴가 화면 안쪽으로 이동하고 좁은 화면에서는 스크롤할 수 있다. F5는 페이지 재로드 대신 현재 저장소를 새로고침한다.
-
-- **체크아웃**은 선택한 커밋으로 이동하는 detached HEAD 방식이다. 해당 시점에서 작업을 이어가려면 **브랜치**를 만들어 사용한다.
-- **초기화**는 soft(스테이징 유지), mixed(파일 내용 유지·스테이징 해제), hard(파일·스테이징을 대상 시점으로 덮어쓰기)를 구분한다. hard는 `HARD`를 입력해야 실행된다. 브랜치 이력 변경은 원격에 자동으로 푸시하지 않는다.
-- **커밋 되돌리기**는 변경을 취소하는 새 커밋을 만든다. 병합 커밋을 되돌리거나 체리픽할 때는 기준 부모를 선택한다. 충돌 시 **파일 상태**에서 해결하고 **계속/중단**으로 이어간다.
-- **자식 커밋 쌍방향 재배치**는 선택한 커밋 이후 현재 HEAD까지의 순서 변경·squash·fixup·drop을 지원한다. 깨끗한 로컬 브랜치의 병합 없는 단일 이력에서 최대 100개까지 처리한다. 서버에서도 목록·작업 종류·실행 전 HEAD를 확인한다.
-- **아카이브/패치**는 브라우저 다운로드로 저장한다. 파일 하나당 원본 크기 12 MiB까지 지원하며, 병합 커밋의 단일 패치 생성은 지원하지 않는다.
-- **외부 비교 도구**는 선택한 실행 환경 Git의 `diff.tool` 설정을 사용해 첫 부모와 선택한 커밋을 비교한다. 설정이 없거나 첫 커밋이면 비활성화된다. 예: `git config --global diff.tool meld` (해당 도구가 설치되어 있어야 한다). 단축키는 히스토리에서 Ctrl+D다.
-- **추가 작업**에서 HEAD와 비교·비교 시작점 지정·터미널·탐색기 열기를 사용할 수 있다.
-
-### Git Flow
-
-1. **Git Flow → 운영·개발 브랜치 설정**에서 저장소가 사용하는 브랜치 이름을 선택한다. 예를 들어 운영을 `main`, 개발을 `dev`로 지정할 수 있다. 개발 브랜치가 없으면 운영 브랜치에서 만든다.
-2. **작업 시작**을 누르고 유형과 이름을 선택한다. feature·release는 개발 브랜치에서, hotfix는 운영 브랜치에서 분기한다.
-3. 작업 브랜치를 체크아웃한 상태에서 **현재 작업 종료**를 실행한다. feature는 개발 브랜치에 병합한다. release·hotfix는 운영 브랜치에 병합하고 버전 태그를 만든 후 개발 브랜치에도 반영한다. 성공하면 개발 브랜치로 전환하고 작업 브랜치를 정리한다.
-4. 종료 시 임시 작업 트리에서 병합을 먼저 시도하고 브랜치와 태그를 하나의 Git 트랜잭션으로 갱신한다. 병합 충돌이 발생하면 대상 브랜치를 갱신하기 전에 멈춘다. 작업 브랜치에서 충돌 원인을 해결한 후 종료를 다시 실행한다. 원격 반영은 **푸시** 및 **태그 푸시**를 사용한다.
-
-선택한 환경 사용자의 Git 설정과 인증 수단을 사용한다. 대화형 인증이 필요한 경우 같은 Windows 또는 WSL 환경에서 해당 원격에 대한 `git fetch`가 성공하는지 확인한다.
-
-히스토리는 최근 150개부터 최대 5,000개까지 불러온다. 검색은 불러온 커밋을 대상으로 한다. diff 미리보기는 192 KiB 또는 3,000줄까지 표시한다. 줄 선택은 한 파일 버전당 256 KiB·5,000줄 이하 UTF-8 일반 텍스트에서 가능하다. 이름 변경은 파일 목록에 삭제·추가 두 항목으로 표시한다.
-
-## 테스트
-
-업데이트는 네트워크 실패·파일 변조·잘못된 적용 요청·도우미 실패·백그라운드 처리·커밋 메시지 복원을 자동 검사한다. 브라우저 검사에서는 다운로드 중 저장소 작업과 적용/재시작 요청을 확인하며, 실제 Windows 프로세스의 자동 종료·캐시 연결·재실행은 Windows 11에서 별도로 확인해야 한다. 이 개발 환경의 Linux 검사에서는 해당 Windows 실행 단계가 모의 처리된다.
-
-기본 테스트는 임시 Git 저장소와 로컬 bare 원격을 만든다.
+## Validation
 
 ```bash
 python3 -m unittest discover -s tests -v
-```
-
-선택적 브라우저 테스트는 Playwright Python 패키지와 Chromium이 있는 Linux 데스크톱에서 실행한다. 앱 실행에 이 두 테스트용 의존성은 필요하지 않다.
-
-```bash
+# Optional: requires Playwright for Python and Chromium, only for testing
 python3 tests/browser_smoke.py
 BRANCHDESK_EXE=./Branchdesk.exe python3 tests/browser_smoke.py
 ```
 
-두 번째 명령은 EXE의 내장 파일을 배포 소스와 대조하고 내장 Python 실행 명령, 세션 시작·종료, 실제 Chromium 조작을 검사한다. Windows 프로세스 실행과 WSL 연결은 Windows 11에서 별도로 확인한다.
+Tests use temporary repositories and local bare remotes. They cover Git workflows, profile/worker transport, SSH key safety, selected-version file previews, branch cleanup safeguards and graph lookup, remote URL conversion, and updater error paths. Browser tests exercise menus, file previews, branch click/double-click behavior, remote choice, open-window messages, and updates; actual Windows process launching is mocked on Linux.
 
-실행 환경 테스트는 별도 Python 프로세스·사용자 지정 Git 실행 파일, 한글·공백 경로, 파일 경로와 저장소 경로의 분리, 탭 복원, 잘못된 환경 저장 거절, SSH 키 생성·중복 생성 거절·공개키 반환을 확인한다. 설치 창과 Windows 네이티브 실행·Windows OpenSSH 에이전트·Windows↔WSL 왕복은 이 Linux 테스트 환경에서 실제 실행할 수 없으므로 Windows 11에서 별도 확인해야 한다.
-
-1. WSL을 쓰던 PC에서 기존 탭과 Git 작업이 유지되는지 확인한다.
-2. WSL 없는 Windows에서 Python·Git 경로 선택 또는 전용 폴더 설치 후 로컬 저장소를 연다.
-3. 새 Windows/WSL 환경을 추가하고 저장소별 Git 버전·SSH 키·줄바꿈 설정이 맞는지 확인한다.
-4. 시작 OS를 바꾼 뒤 기존 환경과 탭을 다시 열고, 공개키 등록·ssh-agent 인증을 확인한다.
-5. 업데이트 다운로드·적용 후 새 버전이 선택한 시작 환경으로 실행되는지 확인한다.
-
-Windows에서 EXE 시작·종료를 자동 점검할 때는 clone한 폴더에서 PowerShell로 아래 명령을 실행한다. 테스트가 연 Edge 창과 WSL API 응답을 확인하고 창을 닫은 뒤 서버 종료를 점검한다.
+In a prepared Windows 11 desktop session:
 
 ```powershell
 .\windows\test-launch.ps1
+.\windows\test-window-state.ps1
 ```
+
+Close other Branchdesk windows before the placement test. It checks normal position/size, maximized restart, and closing while minimized, then restores the previous placement file. Actual Windows installation, foreground activation, multi-monitor placement, and update restart need Windows testing; they are not executed by the Linux tests.

@@ -1,10 +1,14 @@
 """Repository management and Git Flow operations used by Branchdesk."""
 import heapq
+import hashlib
 import json
 import os
 import shutil
 import subprocess
 import tempfile
+import re
+import webbrowser
+from urllib.parse import urlsplit, urlunsplit
 from pathlib import Path
 
 from gitdesk import GitError, changes, current, fields, git, line, verify_commit
@@ -54,6 +58,51 @@ def remote_urls(root):
             for name in line(git(root, "remote")).splitlines()]
 
 
+def website_url(address):
+    """Convert a Git transport URL to a credential-free repository webpage."""
+    if not isinstance(address, str) or any(ord(c)<33 for c in address) or re.match(r'^[A-Za-z]:[\\/]', address): return None
+    if address.lower().startswith(('file:', 'javascript:', 'data:', 'vbscript:')): return None
+    if '://' not in address:
+        match = re.fullmatch(r'(?:[^/@:\s]+@)?(\[[^]]+\]|[^/:\s]+):(.+)', address)
+        if not match: return None
+        address = 'ssh://' + match[1] + '/' + match[2].lstrip('/')
+    try:
+        parts = urlsplit(address)
+        if parts.scheme not in ('http', 'https', 'ssh', 'git') or not parts.hostname: return None
+        host = parts.hostname
+        if any(c in host for c in '<>"\\'): return None
+        path = '/' + parts.path.lstrip('/').rstrip('/').removesuffix('.git')
+        if host.lower() == 'ssh.dev.azure.com':
+            fields = path.strip('/').split('/')
+            if len(fields) != 4 or fields[0] != 'v3': return None
+            host, path = 'dev.azure.com', '/' + fields[1] + '/' + fields[2] + '/_git/' + fields[3]
+        authority = '['+host+']' if ':' in host else host
+        if parts.scheme in ('http','https') and parts.port: authority += ':' + str(parts.port)
+        return urlunsplit((parts.scheme if parts.scheme in ('http','https') else 'https', authority, path, '', ''))
+    except ValueError: return None
+
+
+def remote_websites(root):
+    result = []
+    for remote in remote_urls(root):
+        for address in remote['fetch']:
+            url = website_url(address)
+            if url and not any(row['name']==remote['name'] and row['url']==url for row in result):
+                result.append(dict(name=remote['name'], url=url))
+    return result
+
+
+def open_remote(root, data):
+    matches = [row for row in remote_websites(root) if row['name'] == data.get('remote') and row['url'] == data.get('website')]
+    if not matches: raise GitError('원격 웹 주소가 바뀌었습니다. 다시 열어 주세요.')
+    url = matches[0]['url']
+    if os.name == 'nt' or os.environ.get('WSL_DISTRO_NAME'):
+        from desktop_actions import open_windows
+        return open_windows('web', url=url)
+    if not webbrowser.open(url, new=2, autoraise=True): raise GitError('기본 브라우저를 열지 못했습니다.')
+    return dict(opened=True, message='원격 저장소 웹페이지를 브라우저로 열었습니다.')
+
+
 def directory_suggestions(path):
     """Complete one native path component without walking the directory tree."""
     if not isinstance(path, str) or len(path) > 4096 or "\x00" in path:
@@ -101,31 +150,54 @@ def new_repository(data):
 
 
 def launch_desktop(root, op):
-    if os.name == "nt":
-        command = ["explorer.exe", str(root)] if op == "explorer" else ["cmd.exe", "/c", "start", "", "powershell.exe", "-NoExit"]
-    elif os.environ.get("WSL_DISTRO_NAME"):
-        if op == "explorer":
-            unc = subprocess.check_output(["wslpath", "-w", str(root)], text=True).rstrip("\n")
-            command = ["explorer.exe", unc]
-        else:
-            # Start in the inherited worktree. Its name never becomes Terminal command syntax.
-            distro = os.environ["WSL_DISTRO_NAME"]
-            if ";" in distro:
-                raise GitError("Windows Terminal에서 이 배포판 이름을 사용할 수 없습니다.")
-            wt = shutil.which("wt.exe")
-            if not wt:
-                raise GitError("Windows Terminal(wt.exe)을 찾을 수 없습니다. Windows의 앱 실행 별칭을 확인하세요.")
-            subprocess.run([wt, "--window", "new", "new-tab", "--startingDirectory", ".",
-                            "wsl.exe", "--distribution", distro],
-                           cwd=root, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                           stderr=subprocess.PIPE, check=True, timeout=20)
-            return
-    else:
-        command = ["xdg-open", str(root)] if op == "explorer" else ["x-terminal-emulator"]
+    if os.name == 'nt' or os.environ.get('WSL_DISTRO_NAME'):
+        from desktop_actions import open_windows
+        return open_windows(op, root=root)
+    command = ['xdg-open', str(root)] if op == 'explorer' else ['x-terminal-emulator']
     if not shutil.which(command[0]):
-        raise GitError(command[0] + " 실행 파일을 찾지 못했습니다.")
+        raise GitError(command[0] + ' 실행 파일을 찾지 못했습니다.')
     subprocess.Popen(command, cwd=root, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                      stderr=subprocess.DEVNULL, start_new_session=True)
+    return dict(opened=True, foreground=False, message='탐색기 열기를 요청했습니다.' if op == 'explorer' else '터미널 열기를 요청했습니다.')
+
+
+def switch_plan(root, name):
+    branch_name(root, name)
+    existing(root, 'heads', name)
+    if in_progress(root): raise GitError('진행 중인 Git 작업을 먼저 마치세요.')
+    records = changes(root)
+    head = line(git(root, 'rev-parse', '--verify', '--quiet', 'HEAD', allowed=(0,1)))
+    branch = current(root)
+    if branch == name: raise GitError('이미 현재 브랜치입니다.')
+    metadata = []
+    for row in records:
+        file = root/row['path']
+        try:
+            info = file.lstat(); marker = (info.st_ino, info.st_size, info.st_mtime_ns)
+        except FileNotFoundError: marker = None
+        metadata.append((row, marker))
+    index = Path(line(git(root, 'rev-parse', '--git-path', 'index')))
+    if not index.is_absolute(): index = root/index
+    try:
+        info = index.stat(); index_marker = (info.st_size, info.st_mtime_ns)
+    except FileNotFoundError: index_marker = None
+    stamp = hashlib.sha256(repr((head, branch, metadata, index_marker)).encode('utf-8', 'surrogatepass')).hexdigest()
+    return dict(head=head, branch=branch, stamp=stamp, files=records)
+
+
+def switch_branch(root, data):
+    name = data['name']
+    if data.get('expectedHead') is not None and (data['expectedHead'] != line(git(root, 'rev-parse', '--verify', '--quiet', 'HEAD', allowed=(0,1))) or data.get('expectedBranch') != current(root)):
+        raise GitError('현재 브랜치가 바뀌었습니다. 다시 확인하세요.')
+    if data.get('clean') is True:
+        plan = switch_plan(root, name)
+        if data.get('planStamp') != plan['stamp']:
+            raise GitError('파일 변경 내용이 바뀌었습니다. 확인창을 다시 열어 버릴 파일을 확인하세요.')
+        git(root, 'switch', '--discard-changes', name)
+        untracked = [row['path'] for row in plan['files'] if row['x']=='?']
+        # Clean only files shown in the confirmation. Ignored files and nested Git repositories survive.
+        if untracked: git(root, 'clean', '-fd', '--', *untracked)
+    else: git(root, 'switch', name)
 
 
 def flow_config(root):
@@ -212,8 +284,10 @@ def operate(root, d):
     name = d.get("name", "")
     if op in ("flow_init", "flow_start", "flow_finish"):
         flow(root, d)
+    elif op == "open_remote":
+        return open_remote(root, d)
     elif op in ("terminal", "explorer"):
-        launch_desktop(root, op)
+        return launch_desktop(root, op)
     elif op in ("branch_rename", "branch_delete"):
         existing(root, "heads", name)
         if op == "branch_delete":

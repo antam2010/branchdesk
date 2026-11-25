@@ -232,7 +232,7 @@ def run(base):
                 loc('.file-folder button[data-file]').dblclick()
                 expect(loc("#diff-popup")).to_be_visible()
                 expect(loc("#popup-file")).to_have_text("src/another.txt")
-                expect(loc("#popup-patch")).to_contain_text("+added")
+                expect(loc("#popup-patch .full-file-preview")).to_contain_text("added")
                 page.keyboard.press("Escape")
                 expect(loc("#diff-popup")).not_to_be_visible()
                 click('[data-file-view="list"]')
@@ -254,9 +254,54 @@ def run(base):
                 tool("fetch");loc("#fetch-remote").select_option("origin")
                 loc("#fetch-prune").check();loc("#fetch-tags").check();submit()
                 expect(loc("#toast")).to_contain_text("페치를 완료")
-                tool("remote");expect(loc("#url-values input").first).to_have_value(str(bare));submit()
+                tool("settings");expect(loc("#url-values input").first).to_have_value(str(bare));submit()
+                desktop_calls = []
+                def desktop_api(route):
+                    request = route.request.post_data_json
+                    if request.get('op') not in ('open_remote','terminal','explorer'): return route.continue_()
+                    desktop_calls.append(request)
+                    route.fulfill(json={'value': {'opened': True, 'foreground': request['op']=='terminal', 'message': '앞쪽에 터미널을 열었습니다.' if request['op']=='terminal' else '작업 표시줄에서 확인하세요.'}})
+                page.route('**/api/action', desktop_api)
+                git('remote','add','web','git@github.com:example/demo.git')
+                tool('refresh'); expect(loc('body')).not_to_have_class('busy'); tool('remote')
+                expect(loc('#toast')).to_contain_text('작업 표시줄')
+                assert desktop_calls[-1]['website']=='https://github.com/example/demo'
+                git('remote','add','mirror','ssh://git@gitlab.example.com:2222/group/demo.git')
+                tool('refresh'); expect(loc('body')).not_to_have_class('busy'); tool('remote')
+                expect(loc('#dialog-title')).to_have_text('원격 저장소 웹페이지 열기')
+                loc('#remote-website').select_option(label='mirror · https://gitlab.example.com/group/demo'); submit()
+                assert desktop_calls[-1]['website']=='https://gitlab.example.com/group/demo'
+                git('remote','remove','web'); git('remote','remove','mirror'); tool('refresh')
+                tool('terminal'); expect(loc('#toast')).to_contain_text('앞쪽에 터미널')
+                tool('folder'); expect(loc('#toast')).to_contain_text('작업 표시줄')
+                page.unroute('**/api/action',desktop_api)
                 tool("branch");fill("#new-name","try-ui");submit()
                 expect(loc(".head-branch")).to_have_text("try-ui")
+                # Single click reveals the graph; double click alone asks to switch.
+                main_ref = loc('[data-ref]').filter(has_text='main').filter(has_not_text='origin')
+                main_ref.click()
+                expect(loc('.logrow.selected')).to_have_attribute('data-rev', last)
+                expect(loc('#dialog')).not_to_be_visible()
+                assert git('branch','--show-current')=='try-ui'
+                main_ref.dblclick()
+                expect(loc('#dialog-title')).to_have_text('브랜치 변경 확인')
+                expect(loc('#branch-clean')).not_to_be_checked()
+                click('#cancel')
+                assert git('branch','--show-current')=='try-ui'
+                main_ref.dblclick(); submit()
+                assert git('branch','--show-current')=='main'
+                loc('[data-ref]').filter(has_text='try-ui').filter(has_not_text='origin').dblclick(); submit()
+                assert git('branch','--show-current')=='try-ui'
+                (repo/'new-preview.txt').write_text('new file first line\nnew file last line\n')
+                (repo/'empty-preview.txt').write_text('')
+                tool('refresh'); click('#go-work')
+                loc('button[data-file]').filter(has_text='new-preview.txt').click()
+                expect(loc('.full-file-preview')).to_contain_text('new file last line')
+                click('#expand-diff'); expect(loc('#popup-patch')).to_contain_text('new file first line')
+                loc('#diff-popup button').click()
+                loc('button[data-file]').filter(has_text='empty-preview.txt').click()
+                expect(loc('.diff')).to_contain_text('빈 파일입니다')
+                (repo/'new-preview.txt').unlink(); (repo/'empty-preview.txt').unlink()
                 (repo/"sample.txt").write_text("line 1\nline 2\npart one\npart two\n")
                 tool("refresh");click("#go-work")
                 work_file = loc('button[data-file]').filter(has_text='sample.txt')
@@ -342,7 +387,7 @@ def run(base):
                 page.screenshot(path=str(ROOT.parent/'environment-settings.png'))
                 click('#environment-close')
                 assert not errors,errors
-                print("PASS Chromium: background app-update UI, Git work during download, apply/restart requests with draft snapshot (Windows restart mocked), desktop menus, clipboard, submenus, commit actions, exports, reset confirmation, rebase plan, and existing Git workflows.",flush=True)
+                print("PASS Chromium: branch single-click reveal and double-click checkout confirmation, new/empty file previews, remote webpage selection, desktop-open feedback, environment setup, menus/clipboard, Git workflows, and app updates (native Windows launches mocked).",flush=True)
             except Exception:
                 print(page.locator("body").inner_text()[-3500:],flush=True)
                 print("Page errors:",errors,flush=True)

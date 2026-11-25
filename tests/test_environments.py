@@ -182,6 +182,36 @@ class EnvironmentTests(unittest.TestCase):
             self.manager.profiles['default'] = dict(name='내 프로젝트')
             self.assertEqual(self.manager.get('default')['name'], '내 프로젝트')
 
+    def test_windows_open_transport_keeps_paths_in_json_and_reports_focus_fallback(self):
+        import desktop_actions
+        root = self.folder/'공백 ; $(literal)'
+        root.mkdir()
+        result = dict(opened=True, foreground=False, message='작업 표시줄에서 확인하세요.')
+        def execute(command, **kwargs):
+            self.assertNotIn(str(root), command)
+            source = Path(command[command.index('-RequestFile')+1])
+            destination = Path(command[command.index('-ResultFile')+1])
+            request = json.loads(source.read_text())
+            self.assertEqual(request['nativePath'], str(root))
+            self.assertEqual(request['distro'], 'Ubuntu')
+            self.assertEqual(request['action'], 'terminal')
+            self.assertTrue(source.with_name('desktop.ps1').read_bytes().startswith(b'\xef\xbb\xbf'))
+            destination.write_text(json.dumps(result))
+            return 0, b'', b''
+        with patch.dict(os.environ, WSL_DISTRO_NAME='Ubuntu'), patch('desktop_actions.shutil.which', return_value='powershell.exe'), patch('updater.wsl_path', side_effect=lambda value, **kwargs: value), patch('process_utils.run', side_effect=execute):
+            self.assertEqual(desktop_actions.open_windows('terminal', root=root), result)
+
+    def test_separate_worker_can_load_and_run_desktop_helper(self):
+        identifier, _ = self.profile()
+        tools = self.folder/'fake-tools'; tools.mkdir()
+        (tools/'powershell.exe').write_text('#!'+sys.executable+'\nimport json,sys\nfrom pathlib import Path\nrequest=json.loads(Path(sys.argv[sys.argv.index("-RequestFile")+1]).read_text())\nassert request["action"]=="terminal"\nPath(sys.argv[sys.argv.index("-ResultFile")+1]).write_text(json.dumps(dict(opened=True,foreground=True,message="worker helper ok")))\n')
+        (tools/'wslpath').write_text('#!'+sys.executable+'\nimport sys\nprint(sys.argv[-1])\n')
+        for tool in tools.iterdir(): tool.chmod(0o755)
+        with patch.dict(os.environ, WSL_DISTRO_NAME='Ubuntu', PATH=str(tools)+os.pathsep+os.environ['PATH']):
+            result = self.manager.call(identifier, 'action', {'root':str(self.repo), 'op':'terminal'})
+        self.assertEqual(result['message'],'worker helper ok')
+        self.assertTrue(result['foreground'])
+
     def test_worker_argv_does_not_interpret_distro_or_python_as_shell(self):
         command = self.manager.command(dict(kind='wsl', distro='Ubuntu test;literal', python='/opt/python with space'))
         self.assertEqual(command[:5], ['wsl.exe', '--distribution', 'Ubuntu test;literal', '--exec', '/opt/python with space'])

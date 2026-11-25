@@ -216,8 +216,8 @@ class Handler(BaseHTTPRequestHandler):
                     value = list(self.server.repos)
             else:
                 op = self.path.removeprefix('/api/')
-                if op not in ('state', 'detail', 'commit-context', 'rebase-plan', 'export', 'diff',
-                              'conflict', 'resolve', 'urls', 'lines', 'lines-apply', 'action'):
+                if op not in ('state', 'locate-commit', 'switch-plan', 'detail', 'commit-context', 'rebase-plan', 'export', 'diff',
+                              'conflict', 'resolve', 'urls', 'remote-websites', 'lines', 'lines-apply', 'action'):
                     return self.reply(404, {})
                 value = self.server.repo_call(d['repo'], op, d)
             response = {"value": value}

@@ -167,6 +167,21 @@ function fetchDialog() {
     tags: checked('fetch-tags')
   }));
 }
+async function branchSwitchDialog(name) {
+  if (name === s.branch) return notice('이미 현재 브랜치입니다.');
+  const expectedRepo = repo;
+  const plan = await api('switch-plan', {name});
+  if (repo !== expectedRepo) return;
+  const files = plan.files.map(file => '<li><code>' + esc(file.path) + '</code></li>').join('');
+  dialog('브랜치 변경 확인', info("작업 복사본을 브랜치 '" + name + "'로 이동하시겠습니까?") +
+    info('일반 전환은 Git이 유지할 수 있는 변경 내용을 가져갑니다. 충돌하면 전환을 중단합니다.') +
+    checkField('branch-clean', '청소 (수정·스테이징·새 파일 변경 버리기)') +
+    '<div id="branch-clean-warning" class="clean-warning" hidden><strong>이 변경은 되돌릴 수 없습니다.</strong><p>아래 변경 파일을 버립니다. 무시된 파일과 별도 Git 저장소는 보존합니다.</p>' + (files ? '<ul>' + files + '</ul>' : '<p>현재 변경된 파일은 없습니다.</p>') + '</div>', '확인', () => {
+      if (repo !== expectedRepo) throw new Error('저장소가 바뀌었습니다. 다시 확인하세요.');
+      return mutation('switch', {name, clean: checked('branch-clean'), expectedHead: plan.head, expectedBranch: plan.branch, planStamp: plan.stamp});
+    });
+  $('#branch-clean').onchange = () => $('#branch-clean-warning').hidden = !checked('branch-clean');
+}
 function branchDialog() {
   const heads = localHeads(),
     others = heads.filter(n => n !== s.branch);
@@ -256,6 +271,21 @@ function tagDialog() {
     })
   }]);
 }
+async function openRemoteWebsite() {
+  const list = await api('remote-websites');
+  if (!list.length) {
+    dialog('원격 저장소 웹페이지', info('이 원격은 로컬 경로이거나 웹 주소로 변환할 수 없습니다. 원격 설정에서 연결 주소를 확인하세요.'), '원격 설정 열기', remotesDialog);
+    return;
+  }
+  const open = async row => {
+    notice('기본 브라우저로 원격 저장소를 여는 중…', true);
+    const result = await api('action', {op: 'open_remote', remote: row.name, website: row.url});
+    notice(result?.message || '기본 브라우저로 원격 저장소를 열었습니다.');
+  };
+  if (list.length === 1) return open(list[0]);
+  const initial = list.findIndex(row => row.name === 'origin');
+  dialog('원격 저장소 웹페이지 열기', selectField('remote-website', '열 원격 저장소', list.map((row, i) => [String(i), row.name + ' · ' + row.url]), String(initial < 0 ? 0 : initial)), '브라우저로 열기', () => open(list[Number(valueOf('remote-website'))]));
+}
 async function remotesDialog() {
   const list = await api('urls');
   const pick = () => selectField('remote-name', '원격', s.remotes);
@@ -264,7 +294,7 @@ async function remotesDialog() {
     const r = urls();
     $('#url-values').innerHTML = [['페치 주소', r.fetch], ['푸시 주소', r.push]].map(([label, values]) => values.map(v => '<label>' + label + '<input class="form-input" readonly value="' + esc(v) + '"></label>').join('')).join('');
   }
-  operations('원격 저장소', [{
+  operations('원격 설정', [{
     id: 'view',
     label: '주소 보기',
     show: !!list.length,

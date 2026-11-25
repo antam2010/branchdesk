@@ -56,6 +56,32 @@ class WorktreeTests(unittest.TestCase):
         self.assertIn("+staged", after[0])
         self.assertIn("+unstaged", after[1])
 
+    def test_new_file_previews_show_contents_empty_binary_and_utf16(self):
+        samples = {'new.txt': 'first\nsecond\n'.encode(), 'empty.txt': b'', 'binary.dat': b'\x00\x01', 'utf16.txt': '한글 내용'.encode('utf-16')}
+        for name, raw in samples.items(): (self.root/name).write_bytes(raw)
+        preview = gitdesk.diff(self.root, dict(kind='work', path='new.txt'))
+        self.assertEqual(preview['text'], 'first\nsecond\n')
+        self.assertFalse(preview['truncated'])
+        self.assertTrue(gitdesk.diff(self.root, dict(kind='work', path='empty.txt'))['empty'])
+        self.assertIn('바이너리', gitdesk.diff(self.root, dict(kind='work', path='binary.dat'))['message'])
+        self.assertEqual(gitdesk.diff(self.root, dict(kind='work', path='utf16.txt'))['text'], '한글 내용')
+        (self.root/'large.txt').write_text('x'*(gitdesk.DIFF_LIMIT+100))
+        preview = gitdesk.diff(self.root, dict(kind='work', path='large.txt'))
+        self.assertTrue(preview['truncated']); self.assertEqual(len(preview['text']), gitdesk.DIFF_LIMIT)
+
+    def test_new_file_index_and_commit_preview_use_selected_version(self):
+        (self.root/'new.txt').write_text('staged version\n')
+        self.act('stage', paths=['new.txt'])
+        (self.root/'new.txt').write_text('working version\n')
+        self.assertEqual(gitdesk.diff(self.root, dict(kind='index', path='new.txt'))['text'], 'staged version\n')
+        self.act('commit', message='initial')
+        rev = self.git('rev-parse','HEAD').decode().strip()
+        self.assertEqual(gitdesk.diff(self.root, dict(kind='commit', code='A', rev=rev, path='new.txt'))['text'], 'staged version\n')
+        self.git('checkout','--','new.txt')
+        fallback = gitdesk.diff(self.root, dict(kind='work', path='new.txt'))
+        self.assertEqual(fallback['text'], 'staged version\n')
+        self.assertIn('변경 비교 없음', fallback['title'])
+
     def test_merge_first_parent_detail(self):
         self.seed()
         self.act("branch", name="feature")
