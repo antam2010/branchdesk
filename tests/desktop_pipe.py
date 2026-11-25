@@ -22,7 +22,7 @@ def bundled_command(executable):
         assert archive.testzip() is None
         for name in archive.namelist():
             assert archive.read(name) == (ROOT / name).read_bytes(), name
-    prefix = ' --exec python3 -I -u -c "'
+    prefix = ' -I -u -c "'
     pos = exe.index(prefix.encode("utf-16le"))
     end = pos
     while exe[end:end+2] != b"\0\0":

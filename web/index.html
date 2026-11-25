@@ -1,5 +1,5 @@
-<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#132f33"><title>Branchdesk · Git 워크스페이스</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="stylesheet" href="/style.css"><script src="/panes.js" defer></script><script src="/commands.js" defer></script><script src="/app.js" defer></script><script src="/context.js" defer></script><script src="/update.js" defer></script></head>
-<body><header><div class="brand"><img class="logo" src="/icon.png" alt="" width="30" height="30"> Branchdesk</div><span class="brandline"></span><span class="caption">Git 워크스페이스</span><span class="header-right"><button id="app-update-open" type="button">앱 업데이트</button><i class="light"></i> 로컬 세션</span></header>
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#132f33"><title>Branchdesk · Git 워크스페이스</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="stylesheet" href="/style.css"><script src="/panes.js" defer></script><script src="/commands.js" defer></script><script src="/app.js" defer></script><script src="/context.js" defer></script><script src="/update.js" defer></script><script src="/environments.js" defer></script></head>
+<body><header><div class="brand"><img class="logo" src="/icon.png" alt="" width="30" height="30"> Branchdesk</div><span class="brandline"></span><span class="caption">Git 워크스페이스</span><span class="header-right"><button id="environment-open" type="button">실행 환경 · SSH</button><button id="app-update-open" type="button">앱 업데이트</button><i class="light"></i> 로컬 세션</span></header>
 <nav id="tabs" aria-label="저장소"></nav>
 <section id="toolbar" aria-label="Git 작업"></section>
 <div class="layout"><aside><div class="sect">워크스페이스</div><button id="go-log"></button><button id="go-work"></button><div id="nav-refs"></div></aside><div class="pane-divider" data-pane="nav" role="separator" tabindex="0" aria-orientation="vertical" aria-label="사이드바 너비"></div>
@@ -8,4 +8,20 @@
 <dialog id="dialog"><form id="form"><div id="dialog-kind" class="sect">BRANCHDESK</div><h2 id="dialog-title"></h2><div id="dialog-body"></div><div class="dialog-actions"><button type="button" id="cancel">취소</button><button class="primary" id="confirm">확인</button></div></form></dialog>
 <dialog id="diff-popup" aria-labelledby="popup-file"><div class="popup-head"><h2 id="popup-file"></h2><form method="dialog"><button autofocus>닫기</button></form></div><div id="popup-patch" class="popup-patch" tabindex="0"></div></dialog>
 <dialog id="app-update-dialog" aria-labelledby="app-update-title"><h2 id="app-update-title">앱 업데이트</h2><p id="app-update-status" role="status"></p><p id="app-update-release"></p><p>저장소 파일과 로컬 수정 내용은 변경하지 않습니다. 열어둔 저장소와 작성 중인 커밋 메시지는 다시 열 때 복원합니다.</p><div class="dialog-actions"><button id="app-update-close" type="button">닫기</button><button id="app-update-check" type="button">다시 확인</button><button id="app-update-download" class="primary" type="button" hidden>새 버전 받기</button><button id="app-update-apply" class="primary" type="button" hidden>적용 후 재시작</button></div></dialog>
-<div id="toast" role="alert" hidden></div></body></html>
+<div id="toast" role="alert" hidden></div><dialog id="environment-dialog" aria-labelledby="environment-title">
+<h2 id="environment-title">실행 환경 · SSH</h2><p id="env-message" role="status"></p>
+<label>환경<select id="env-profile"></select></label><div id="env-fields" class="environment-fields"></div>
+<div class="dialog-actions"><button id="env-check" data-env-task type="button">저장된 환경 확인</button><button id="env-startup" data-env-task type="button">다음 앱 시작 환경으로</button><button id="env-save" class="primary" data-env-task type="button">확인·저장</button></div>
+<details><summary>필요한 프로그램 설치</summary><p>Windows는 WinGet으로 지정한 사용자 폴더에 설치합니다. 기존 설치가 있으면 해당 경로를 연결하세요. WSL은 Ubuntu/Debian 패키지 관리자로 Python·Git·OpenSSH를 설치합니다.</p>
+<label>설치 환경<select id="env-install-kind"><option value="windows">Windows</option><option value="wsl">WSL</option></select></label>
+<label>Windows 설치 폴더<input id="env-install-dir" class="form-input"></label><label>WSL 배포판 (비우면 기본 배포판)<input id="env-install-distro" class="form-input"></label>
+<button id="env-install" data-env-task type="button">설치 창 열기</button><p id="env-install-status" role="status"></p></details>
+<details id="env-ssh-actions"><summary>SSH 키 관리</summary><p>경로는 선택한 환경 기준입니다. 기존 키의 암호는 해당 환경의 ssh-agent에서 해제하세요. 호스트 키 확인은 유지합니다.</p>
+<button id="env-keys-load" data-env-task type="button">기존 키 찾기</button><select id="env-keys" aria-label="기존 SSH 키"></select>
+<div class="dialog-actions"><button id="env-public" data-env-task type="button">입력한 키의 공개키 보기</button><button id="env-copy" data-env-task type="button">공개키 복사</button></div>
+<textarea id="env-public-key" rows="3" readonly aria-label="SSH 공개키"></textarea>
+<details><summary>새 Ed25519 키 생성</summary><label>키 이름<input id="env-key-name" class="form-input" value="personal"></label><label>키 설명<input id="env-key-comment" class="form-input" value="Branchdesk"></label>
+<p>~/.ssh/branchdesk-이름/id_ed25519에 생성합니다. 같은 이름의 키는 덮어쓰지 않습니다. 암호가 있는 키가 필요하면 터미널에서 ssh-keygen으로 생성한 뒤 경로를 연결하세요.</p>
+<label class="check"><input id="env-unprotected" type="checkbox">암호 없는 개인키로 생성</label><button id="env-generate" data-env-task type="button">새 키 생성</button></details>
+<label>연결 확인<select id="env-ssh-host"><option>github.com</option><option>gitlab.com</option><option>bitbucket.org</option></select></label><button id="env-test" data-env-task type="button">저장된 SSH 설정으로 인증 확인</button></details>
+<pre id="env-report" tabindex="0"></pre><div class="dialog-actions"><button id="environment-close" type="button">닫기</button></div></dialog></body></html>

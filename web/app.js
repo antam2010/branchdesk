@@ -110,8 +110,10 @@ async function exclusive(job) {
 function tool(k, label, disabled = false) {
   return '<button class="tool" data-tool="' + k + '" ' + (disabled ? 'disabled' : '') + '>' + icon(k) + esc(label) + '</button>';
 }
+const environmentRepoPath = value => value?.startsWith('bd:') ? value.slice(value.indexOf(':', 3) + 1) : value;
+const environmentRepoName = value => environmentRepoPath(value)?.split(/[\\/]/).pop() || value;
 function chrome() {
-  $("#tabs").innerHTML = repos.map((p, i) => '<button class="repo-tab ' + (p === repo ? 'active' : '') + '" data-tab="' + i + '" title="' + esc(p) + '">' + icon("repo") + esc(p.split("/").pop() || p) + '</button><button class="close-tab" data-close="' + i + '" aria-label="' + esc(p) + ' 탭 닫기">×</button>').join("") + '<button class="add-tab" id="add">' + icon("plus") + '저장소 열기</button>';
+  $("#tabs").innerHTML = repos.map((p, i) => '<button class="repo-tab ' + (p === repo ? 'active' : '') + '" data-tab="' + i + '" title="' + esc(environmentRepoPath(p)) + '">' + icon("repo") + esc(environmentRepoName(p)) + '</button><button class="close-tab" data-close="' + i + '" aria-label="' + esc(p) + ' 탭 닫기">×</button>').join("") + '<button class="add-tab" id="add">' + icon("plus") + '저장소 열기</button>';
   const off = !s,
     remote = off || !s.remotes.length;
   $("#toolbar").innerHTML = tool("commit", "커밋", off) + '<span class="separator"></span>' + tool("pull", "풀", remote) + tool("push", "푸시", remote) + tool("fetch", "페치", remote) + '<span class="separator"></span>' + tool("branch", "브랜치", off || !s.head) + tool("merge", "병합", off || !s.branch || !s.refs.some(r => r.group === "heads" && r.name !== s.branch)) + tool("stash", "스태시", off || !s.head || !s.changes.length) + tool("tag", "태그", off || !s.head) + tool("flow", "Git Flow", off || !s.head) + tool("remote", "원격", off) + tool("terminal", "터미널", off) + tool("folder", "탐색기", off) + '<span class="push-right"></span>' + tool("refresh", "새로고침", off);
@@ -121,7 +123,7 @@ function chrome() {
   $("#go-work").className = mode === "work" ? "active-nav" : "";
   $("#go-log").disabled = off;
   $("#go-work").disabled = off;
-  $("#foot-repo").textContent = repo || "저장소를 열어 주세요";
+  $("#foot-repo").textContent = (s ? s.environmentName + " · " + s.displayPath : environmentRepoPath(repo)) || "저장소를 열어 주세요";
   $("#nav-refs").innerHTML = s ? [["heads", "브랜치", "branch"], ["remotes", "원격 브랜치", "remote"], ["tags", "태그", "tag"]].map(([g, name, k]) => {
     const refs = s.refs.map((r, i) => ({
       ...r,
@@ -353,7 +355,7 @@ function enableCommit() {
 function recentList() {
   if (!recentRepos.length) return "";
   const buttons = recentRepos.map(path => '<button type="button" data-recent="' + esc(path) +
-    '"><strong>' + esc(path.split("/").pop() || path) + '</strong><small>' + esc(path) + '</small></button>');
+    '"><strong>' + esc(environmentRepoName(path)) + '</strong><small>' + esc(environmentRepoPath(path)) + '</small></button>');
   return '<section class="recent-repos"><h3>최근 저장소</h3><div>' + buttons.join("") + '</div></section>';
 }
 async function loadRecent() {

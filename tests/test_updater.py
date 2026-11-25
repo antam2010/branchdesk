@@ -75,6 +75,16 @@ class UpdaterTests(unittest.TestCase):
         self.assertEqual(self.current.read_bytes(), executable(1))
         self.assertEqual(self.readme.read_text(), 'local notes\n')
 
+    def test_shared_resume_path_and_legacy_fallback(self):
+        legacy = dict(drafts=[['/repo', 'old draft']])
+        updater.save_ui_state(legacy)
+        shared = self.root/'WindowsState/resume-ui.json'
+        self.assertEqual(updater.restore_ui_state(shared), legacy)
+        current = dict(drafts=[['/repo', 'new draft']])
+        updater.save_ui_state(current, shared)
+        self.assertEqual(updater.restore_ui_state(shared), current)
+        self.assertFalse(shared.exists())
+
     def test_current_binary_and_unsupported_source_mode(self):
         self.current.write_bytes(self.target)
         self.app.check(); self.assertEqual(self.finished()['state'], 'current')

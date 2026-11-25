@@ -148,6 +148,6 @@ def operate(root, data):
             editor.write_text("from pathlib import Path\nimport sys\nPath(sys.argv[1]).write_text(" +
                               repr("\n".join(todo) + "\n") + ", encoding='utf-8')\n", encoding="utf-8")
             git(root, "-c", "rebase.updateRefs=false", "rebase", "--interactive", "--no-autostash", rev, editor="true",
-                sequence_editor=shlex.quote(sys.executable) + " " + shlex.quote(str(editor)))
+                sequence_editor=shlex.quote(sys.executable.replace("\\", "/")) + " " + shlex.quote(str(editor).replace("\\", "/")))
     else:
         raise GitError("지원하지 않는 커밋 작업입니다.")

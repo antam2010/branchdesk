@@ -9,10 +9,12 @@
 
 static HICON app_icon_big=NULL, app_icon_small=NULL;
 static WCHAR launcher_path[MAX_PATH]={0}, update_signal[MAX_PATH]={0};
+static WCHAR runtime_python[1024]={0};
 
-/* Only the data pipe crosses into WSL. Git paths never pass through Win32. */
+/* Python and Git run in the selected OS. The native bridge carries only HTTP bytes. */
 static const WCHAR bootstrap[] =
-    L" --exec python3 -I -u -c \"import io,os,sys,tempfile,zipfile;"
+    L" -I -u -c \"import io,os,sys,tempfile,zipfile;"
+    L"os.name=='nt' and (__import__('msvcrt').setmode(sys.stdin.fileno(),os.O_BINARY),__import__('msvcrt').setmode(sys.stdout.fileno(),os.O_BINARY));"
     L"d=tempfile.TemporaryDirectory(prefix='branchdesk-');"
     L"z=zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read(" PAYLOAD_SIZE L")));"
     L"z.extractall(d.name);z.close();sys.path[:0]=[d.name,os.path.join(d.name,'windows')];"
@@ -63,7 +65,7 @@ static BOOL write_all(HANDLE pipe, const unsigned char *data, DWORD n) {
 
 #include "bridge.h"
 
-/* A dedicated writer keeps a WSL cold start from blocking the startup timeout. */
+/* A dedicated writer keeps a Python/WSL cold start from blocking the startup timeout. */
 static DWORD WINAPI send_payload(void *pipe) {
     char port[64];
     int n=wsprintfA(port,"%u\n%u\n%u\n%u\n",(unsigned)desktop_port,(unsigned)GetCurrentProcessId(),
@@ -120,13 +122,14 @@ static BOOL temp_profile(WCHAR *path) {
 }
 /* Only the official WSL installer requests UAC; the helper stays unelevated. */
 static int ensure_prerequisites(const WCHAR *directory) {
-    WCHAR script[MAX_PATH]={0}, powershell[MAX_PATH], cmd[2048]={0};
+    WCHAR script[MAX_PATH]={0}, runtime[MAX_PATH]={0}, powershell[MAX_PATH], cmd[2048]={0};
     HANDLE file=NULL;
     PROCESS_INFORMATION process={0};
     STARTUPINFOW si={0};
     DWORD code=3;
     BOOL launched=FALSE;
     si.cb=sizeof(si);
+    if(!append(runtime,MAX_PATH,directory) || !append(runtime,MAX_PATH,L"\\runtime.txt")) goto done;
     if(!append(script,MAX_PATH,directory) || !append(script,MAX_PATH,L"\\setup.ps1")) goto done;
     file=CreateFileW(script,GENERIC_WRITE,0,NULL,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,NULL);
     if(file==INVALID_HANDLE_VALUE) { file=NULL; goto done; }
@@ -136,12 +139,23 @@ static int ensure_prerequisites(const WCHAR *directory) {
     if(!n || n>=MAX_PATH || !append(powershell,MAX_PATH,L"\\WindowsPowerShell\\v1.0\\powershell.exe")) goto done;
     if(!append(cmd,2048,L"powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"") ||
        !append(cmd,2048,script) || !append(cmd,2048,L"\" -Launcher \"") ||
-       !append(cmd,2048,launcher_path) || !append(cmd,2048,L"\"")) goto done;
+       !append(cmd,2048,launcher_path) || !append(cmd,2048,L"\" -RuntimeFile \"") ||
+       !append(cmd,2048,runtime) || !append(cmd,2048,L"\"")) goto done;
     if(!CreateProcessW(powershell,cmd,NULL,NULL,FALSE,CREATE_NO_WINDOW,NULL,NULL,&si,&process)) goto done;
     launched=TRUE;
     close_handle(&process.hThread);
     if(WaitForSingleObject(process.hProcess,INFINITE)==WAIT_OBJECT_0)
         GetExitCodeProcess(process.hProcess,&code);
+    if(code==0) {
+        DWORD got=0;
+        file=CreateFileW(runtime,GENERIC_READ,FILE_SHARE_READ,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
+        if(file==INVALID_HANDLE_VALUE) { file=NULL; code=3; }
+        else {
+            if(!ReadFile(file,runtime_python,sizeof(runtime_python)-sizeof(WCHAR),&got,NULL) || !got || got%2) code=3;
+            runtime_python[got/2]=0;
+            for(DWORD i=0;runtime_python[i];i++) if(runtime_python[i]=='"' || runtime_python[i]<32) code=3;
+        }
+    }
 done:
     close_handle(&file);
     close_handle(&process.hProcess);
@@ -222,8 +236,13 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE prev,LPWSTR args,int show) {
     if (!CreatePipe(&child_in,&input,&sa,0) || !CreatePipe(&output,&child_out,&sa,0) ||
         !SetHandleInformation(input,HANDLE_FLAG_INHERIT,0) ||
         !SetHandleInformation(output,HANDLE_FLAG_INHERIT,0)) goto startup_error;
-    if (!append(cmd,2048,L"wsl.exe") || !append(cmd,2048,bootstrap) ||
-        !start(wsl,cmd,child_in,child_out,&backend)) goto startup_error;
+    if(!lstrcmpW(runtime_python,L"wsl")) {
+        if(!append(cmd,2048,L"wsl.exe --exec python3") || !append(cmd,2048,bootstrap) ||
+           !start(wsl,cmd,child_in,child_out,&backend)) goto startup_error;
+    } else {
+        if(!append(cmd,2048,L"\"") || !append(cmd,2048,runtime_python) || !append(cmd,2048,L"\"") ||
+           !append(cmd,2048,bootstrap) || !start(runtime_python,cmd,child_in,child_out,&backend)) goto startup_error;
+    }
     close_handle(&child_in); close_handle(&child_out);
     writer=CreateThread(NULL,0,send_payload,input,0,NULL);
     if (!writer || !await_ready(output,backend.hProcess,url)) goto startup_error;
@@ -232,7 +251,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE prev,LPWSTR args,int show) {
     if(!acceptor) goto startup_error;
     CloseHandle(acceptor);
     if(!check_local()) {
-        alert(L"BD-03: Windows에서 보낸 연결 확인 요청에 WSL Git 서비스가 응답하지 않았습니다.");
+        alert(L"BD-03: Windows에서 보낸 연결 확인 요청에 Git 서비스가 응답하지 않았습니다.");
         goto cleanup;
     }
     cmd[0]=0;
@@ -242,11 +261,11 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE prev,LPWSTR args,int show) {
     DWORD state=wait_window(backend.hProcess,&app);
     if(state==2) { alert(L"BD-04: Windows 연결 확인은 성공했지만 Edge에서 Branchdesk 화면을 확인하지 못했습니다."); }
     else if (state==1) {
-        alert(L"BD-05: WSL 연결이 종료되었습니다. Branchdesk를 다시 열어 주세요.");
+        alert(L"BD-05: Git 서비스 연결이 종료되었습니다. Branchdesk를 다시 열어 주세요.");
     } else { result=0; }
     goto cleanup;
 startup_error:
-    alert(L"BD-02: 실행 환경은 준비됐지만 WSL Git 서비스를 시작하지 못했습니다.\n\n기본 WSL 배포판을 열어 정상 동작하는지 확인한 뒤 Branchdesk를 다시 실행하세요.");
+    alert(L"BD-02: 실행 환경은 준비됐지만 Git 서비스를 시작하지 못했습니다.\n\n선택한 Python·Git 실행 파일 경로를 확인한 뒤 Branchdesk를 다시 실행하세요.");
 cleanup:
     if(listener!=INVALID_SOCKET) closesocket(listener);
     close_handle(&child_in); close_handle(&child_out);

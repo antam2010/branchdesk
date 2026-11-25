@@ -1,4 +1,4 @@
-# Run in a Windows desktop session with Edge and the default WSL distribution.
+# Run in a Windows desktop session with Edge and the configured Windows or WSL runtime.
 param([string]$Exe = (Join-Path $PSScriptRoot '..\Branchdesk.exe'))
 $ErrorActionPreference = 'Stop'
 $launcher = Start-Process -FilePath (Resolve-Path $Exe).Path -PassThru
@@ -33,7 +33,7 @@ try {
     $listening = $true
     try { $null = Invoke-WebRequest -UseBasicParsing "$base/" -TimeoutSec 2 } catch { $listening = $false }
     if ($listening) { throw "The server still responds after the test window closed." }
-    Write-Output 'PASS: Branchdesk.exe, Edge window, authenticated WSL API, bundled UI, window close and server shutdown.'
+    Write-Output 'PASS: Branchdesk.exe, Edge window, authenticated local API, bundled UI, window close and server shutdown.'
 } finally {
     if ($edge) {
         $edge.Refresh()

@@ -55,11 +55,13 @@ def remote_urls(root):
 
 
 def directory_suggestions(path):
-    """Complete a single WSL path component without walking the directory tree."""
+    """Complete one native path component without walking the directory tree."""
     if not isinstance(path, str) or len(path) > 4096 or "\x00" in path:
         return []
+    if os.name == "nt":
+        path = path.replace("\\", "/")
     if not path:
-        return ["~/", "/"]
+        return [str(Path.home()).replace("\\", "/") + "/"] if os.name == "nt" else ["~/", "/"]
     if path == "~":
         return ["~/"]
     parent, slash, prefix = path.rpartition("/")
@@ -99,7 +101,9 @@ def new_repository(data):
 
 
 def launch_desktop(root, op):
-    if os.environ.get("WSL_DISTRO_NAME"):
+    if os.name == "nt":
+        command = ["explorer.exe", str(root)] if op == "explorer" else ["cmd.exe", "/c", "start", "", "powershell.exe", "-NoExit"]
+    elif os.environ.get("WSL_DISTRO_NAME"):
         if op == "explorer":
             unc = subprocess.check_output(["wslpath", "-w", str(root)], text=True).rstrip("\n")
             command = ["explorer.exe", unc]
@@ -194,13 +198,8 @@ def flow(root, data):
                     updates.append(f"create {tag} {new}")
                     source = new
             updates.append(f"verify {topic_ref} {tip}")
-            with tempfile.TemporaryFile() as txn:
-                txn.write(("\n".join(updates)+"\n").encode("utf-8","surrogateescape"))
-                txn.seek(0)
-                proc = subprocess.run(["git", "-C", str(root), "update-ref", "--stdin"], stdin=txn,
-                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
-                if proc.returncode:
-                    raise GitError(proc.stderr.decode(errors="replace"))
+            git(root, "update-ref", "--stdin", timeout=30,
+                input_data=("\n".join(updates)+"\n").encode("utf-8", "surrogateescape"))
         finally:
             git(root, "worktree", "remove", "--force", str(work))
     git(root, "switch", dev)

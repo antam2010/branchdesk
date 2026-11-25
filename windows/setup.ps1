@@ -1,5 +1,7 @@
-param([switch]$Install, [string]$Launcher = '')
+param([switch]$Install, [string]$Launcher = '', [string]$RuntimeFile = '')
 $ErrorActionPreference = 'Stop'
+# EMBED_TOOLS
+if (!$ToolsScript -and (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'tools.ps1'))) { $ToolsScript = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'tools.ps1') -Raw -Encoding UTF8 }
 
 # This check runs as the desktop user. Only WSL's official installer requests UAC.
 $Wsl = Join-Path $env:SystemRoot 'System32\wsl.exe'
@@ -147,13 +149,119 @@ function Install-Environment {
     return 0
 }
 
+function Write-Runtime([string]$Python) {
+    if ($RuntimeFile) { [IO.File]::WriteAllText($RuntimeFile, $Python, (New-Object Text.UnicodeEncoding($false,$false))) }
+}
+function Get-WindowsDefaults {
+    $root = Join-Path $env:LOCALAPPDATA 'Branchdesk\tools'
+    $python = Join-Path $root 'python\python.exe'
+    $git = Join-Path $root 'git\cmd\git.exe'
+    if (!(Test-Path -LiteralPath $python)) {
+        $found = Get-Command python.exe -ErrorAction SilentlyContinue
+        if ($found -and $found.Source -notlike '*\WindowsApps\*') { $python = $found.Source }
+    }
+    if (!(Test-Path -LiteralPath $git)) {
+        $found = Get-Command git.exe -ErrorAction SilentlyContinue
+        if ($found) { $git = $found.Source }
+        elseif (Test-Path -LiteralPath 'C:\Program Files\Git\cmd\git.exe') { $git = 'C:\Program Files\Git\cmd\git.exe' }
+    }
+    return @{python=$python; git=$git; kind='windows'}
+}
+function Test-WindowsHost($Config) {
+    if (!(Get-Edge) -or !$Config.python -or !$Config.git) { return $false }
+    if (!(Test-Path -LiteralPath $Config.python -PathType Leaf) -or !(Test-Path -LiteralPath $Config.git -PathType Leaf)) { return $false }
+    try {
+        & $Config.python -I -c 'import sys; sys.exit(sys.version_info < (3, 9))' 2>$null
+        if ($LASTEXITCODE -ne 0) { return $false }
+        $version = & $Config.git --version 2>$null
+        return $LASTEXITCODE -eq 0 -and $version -match 'git version (\d+)\.(\d+)' -and ([int]$Matches[1] -gt 2 -or ([int]$Matches[1] -eq 2 -and [int]$Matches[2] -ge 28))
+    } catch { return $false }
+}
+function Select-WindowsHost($Config) {
+    Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
+    $form = New-Object Windows.Forms.Form
+    $form.Text = 'Branchdesk 실행 환경'
+    $form.Size = New-Object Drawing.Size(680,380)
+    $form.StartPosition = 'CenterScreen'
+    $form.FormBorderStyle = 'FixedDialog'
+    $form.MaximizeBox = $false
+    $title = New-Object Windows.Forms.Label
+    $title.Text = 'Windows 단독 실행: Python·Git 경로를 선택하세요. (WSL 불필요)'
+    $title.SetBounds(18,18,620,26); $form.Controls.Add($title)
+    $boxes = @{}
+    $row = 62
+    foreach ($name in @('python','git')) {
+        $label = New-Object Windows.Forms.Label
+        $label.Text = if ($name -eq 'python') {'Python 실행 파일 (3.9 이상)'} else {'Git 실행 파일 (2.28 이상)'}
+        $label.SetBounds(18,$row,600,22); $form.Controls.Add($label)
+        $box = New-Object Windows.Forms.TextBox
+        $box.Text = $Config.$name
+        $box.SetBounds(18,($row+24),530,26); $form.Controls.Add($box); $boxes[$name] = $box
+        $browse = New-Object Windows.Forms.Button
+        $browse.Text = '찾기'; $browse.SetBounds(558,($row+23),80,27)
+        $browse.Tag = $box
+        $browse.Add_Click({ $picker = New-Object Windows.Forms.OpenFileDialog; $picker.Filter = '실행 파일 (*.exe)|*.exe'; if ($picker.ShowDialog() -eq 'OK') { $this.Tag.Text = $picker.FileName }; $picker.Dispose() })
+        $form.Controls.Add($browse); $row += 78
+    }
+    $install = New-Object Windows.Forms.Button
+    $install.Text = '앱 전용 폴더에 설치'; $install.SetBounds(18,240,170,32)
+    $install.Add_Click({
+        try {
+            $script = Join-Path ([IO.Path]::GetTempPath()) ('branchdesk-tools-'+[guid]::NewGuid().ToString('N')+'.ps1')
+            [IO.File]::WriteAllText($script, $ToolsScript, (New-Object Text.UTF8Encoding($true)))
+            $directory = Join-Path $env:LOCALAPPDATA 'Branchdesk\tools'
+            $arguments = '-NoProfile -ExecutionPolicy Bypass -File "'+$script+'" -Kind windows -Directory "'+$directory+'"'
+            $child = Start-Process -FilePath $PowerShell -ArgumentList $arguments -Wait -PassThru
+            $code = $child.ExitCode; $child.Dispose(); Remove-Item -LiteralPath $script -Force
+            $boxes.python.Text = Join-Path $directory 'python\python.exe'
+            $boxes.git.Text = Join-Path $directory 'git\cmd\git.exe'
+            if ($code -ne 0) { [void](Show-Message '설치가 끝나지 않았습니다. 직접 설치된 실행 파일 경로를 연결할 수도 있습니다.' 'OK' 'Warning') }
+        } catch { [void](Show-Message $_.Exception.Message 'OK' 'Error') }
+    }); $form.Controls.Add($install)
+    $wslButton = New-Object Windows.Forms.Button
+    $wslButton.Text = 'WSL 방식 사용'; $wslButton.SetBounds(200,240,140,32)
+    $wslButton.Add_Click({ $form.Tag = @{kind='wsl'}; $form.DialogResult = 'OK'; $form.Close() }); $form.Controls.Add($wslButton)
+    $go = New-Object Windows.Forms.Button
+    $go.Text = '연결하고 실행'; $go.SetBounds(480,286,158,32)
+    $go.Add_Click({
+        $selected = @{kind='windows'; python=$boxes.python.Text.Trim(); git=$boxes.git.Text.Trim()}
+        if (!(Get-Edge)) { [void](Show-Message 'Microsoft Edge를 먼저 설치하세요: https://www.microsoft.com/edge/download' 'OK' 'Warning'); return }
+        if (!(Test-WindowsHost $selected)) { [void](Show-Message 'Python 3.9 이상·Git 2.28 이상을 실행하지 못했습니다. 경로를 확인하거나 설치 버튼으로 준비하세요.' 'OK' 'Warning'); return }
+        $form.Tag = $selected; $form.DialogResult = 'OK'; $form.Close()
+    }); $form.Controls.Add($go)
+    $form.AcceptButton = $go
+    $answer = $form.ShowDialog()
+    $selected = $form.Tag; $form.Dispose()
+    if ($answer -ne 'OK') { return $null }
+    $root = Join-Path $env:LOCALAPPDATA 'Branchdesk'
+    [void][IO.Directory]::CreateDirectory($root)
+    $selected | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $root 'host.json') -Encoding UTF8
+    return $selected
+}
+
 try {
     if (!$Install -and $Launcher -and (Start-CachedUpdate $Launcher)) { exit 20 }
     if ($Install) {
         $result = Install-Environment
         exit $result
     }
-    $state = Get-EnvironmentState
+    $hostFile = Join-Path $env:LOCALAPPDATA 'Branchdesk\host.json'
+    $config = $null
+    if (Test-Path -LiteralPath $hostFile) { try { $config = Get-Content -LiteralPath $hostFile -Raw -Encoding UTF8 | ConvertFrom-Json } catch {} }
+    $state = $null
+    if (!$config) {
+        $state = Get-EnvironmentState
+        if ($state.Distro -and $state.Shell) { $config = @{kind='wsl'} }
+        else { $config = Get-WindowsDefaults }
+    }
+    if ($config.kind -eq 'windows') {
+        if (!(Test-WindowsHost $config)) { $config = Select-WindowsHost $config }
+        if (!$config) { exit 10 }
+        if ($config.kind -eq 'windows') { Write-Runtime $config.python; exit 0 }
+    }
+    Write-Runtime 'wsl'
+    if (!$state) { $state = Get-EnvironmentState }
     $missing = @(Get-Missing $state)
     if (!$missing.Count) { exit 0 }
     $message = "다음 항목을 준비해야 합니다.`n`n- " + ($missing -join "`n- ") + "`n`n설치를 진행할까요? 인터넷 연결이 필요합니다.`n이미 설치된 기본 WSL 배포판과 Git 설정을 사용합니다."

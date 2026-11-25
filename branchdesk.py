@@ -18,11 +18,12 @@ import partial
 import workspace_ops
 import commit_ops
 import updater
+import environments
 from tab_store import TabStore
 
 WEB = Path(__file__).resolve().parent / "web"
 ASSETS = {"/panes.js": "panes.js", "/": "index.html", "/app.js": "app.js", "/commands.js": "commands.js", "/style.css": "style.css",
-          "/icon.png": "icon.png", "/favicon.ico": "favicon.ico", "/context.js": "context.js", "/update.js": "update.js"}
+          "/icon.png": "icon.png", "/favicon.ico": "favicon.ico", "/context.js": "context.js", "/update.js": "update.js", "/environments.js": "environments.js"}
 
 
 class Desk(ThreadingHTTPServer):
@@ -35,10 +36,17 @@ class Desk(ThreadingHTTPServer):
         self.token = secrets.token_urlsafe(32)
         self.repos = {}
         self.registry_lock = threading.Lock()
+        self.environments = environments.Environments()
         self.tabs = TabStore()
         self.tab_warning = None
         self.active = None
-        self.updater = updater.Updater(launcher)
+        resume_path = None
+        if launcher and launcher.get('pid', 0) > 0:
+            try:
+                windows_root = self.environments.windows_root()
+                if windows_root: resume_path = Path(updater.wsl_path(windows_root)) / 'resume-ui.json'
+            except (ValueError, OSError, subprocess.SubprocessError): pass
+        self.updater = updater.Updater(launcher, resume_path=resume_path)
         try:
             paths, active, self.recent = self.tabs.read()
         except OSError:
@@ -46,10 +54,11 @@ class Desk(ThreadingHTTPServer):
             paths, active, self.recent = [], None, []
         for path in paths:
             try:
-                root = gitdesk.repository(path)
-            except (OSError, ValueError, RuntimeError):
+                profile, native_path = environments.split_repo(path)
+                root = self.environments.call(profile, 'open', {'path': native_path})
+            except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
                 continue
-            if str(root) == path:
+            if root == native_path:
                 self.repos[path] = (root, threading.Lock())
         self.active = active if active in self.repos else next(iter(self.repos), None)
 
@@ -59,7 +68,7 @@ class Desk(ThreadingHTTPServer):
         except OSError:
             if not closing:
                 self.recent = [path] + [p for p in self.recent if p != path]
-            self.tab_warning = "열린 탭을 저장하지 못했습니다. WSL 사용자 상태 폴더의 쓰기 권한을 확인하세요."
+            self.tab_warning = "열린 탭을 저장하지 못했습니다. 사용자 상태 폴더의 쓰기 권한을 확인하세요."
 
     def select_tab(self, path):
         with self.registry_lock:
@@ -79,15 +88,28 @@ class Desk(ThreadingHTTPServer):
                 self.remember(path, closing=True)
             return list(self.repos)
 
-    def register(self, path, exact=False):
-        root = gitdesk.repository(path)
-        if exact and str(root) != path:
+    def register(self, path, exact=False, profile=None):
+        if profile is None:
+            profile, path = environments.split_repo(path)
+        root = self.environments.call(profile, 'open', {'path': path})
+        if exact and root != path:
             raise ValueError("해당 경로에서 이전 저장소를 찾을 수 없습니다.")
+        identifier = environments.repo_id(profile, root)
         with self.registry_lock:
-            self.repos.setdefault(str(root), (root, threading.Lock()))
-            self.active = str(root)
+            self.repos.setdefault(identifier, (root, threading.Lock()))
+            self.active = identifier
             self.remember(self.active)
-        return str(root)
+        return identifier
+
+    def repo_call(self, identifier, op, data):
+        root, lock = self.repos[identifier]
+        profile, native_path = environments.split_repo(identifier)
+        with lock:
+            value = self.environments.call(profile, op, dict(data, root=native_path))
+            if op == 'state':
+                value.update(path=identifier, displayPath=native_path, environment=profile,
+                             environmentName=self.environments.get(profile)['name'])
+            return value
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -145,22 +167,34 @@ class Handler(BaseHTTPRequestHandler):
                     for row in raw_drafts:
                         if not isinstance(row, list) or len(row) != 2: raise ValueError('입력 상태를 확인하세요.')
                         path, message = row
-                        if not isinstance(path, str) or not path.startswith('/') or len(path) > 4096 or not isinstance(message, str) or len(message) > 100000:
+                        if not isinstance(path, str) or not (os.path.isabs(path) or path.startswith('bd:')) or len(path) > 4096 or not isinstance(message, str) or len(message) > 100000:
                             raise ValueError('작성 중인 메시지를 확인한 뒤 다시 적용하세요.')
                         drafts.append([path, message])
                     resume = dict(drafts=drafts, repo=ui.get('repo') if ui.get('repo') in self.server.repos else self.server.active,
                                   mode='work' if ui.get('mode') == 'work' else 'history')
-                    value = app.apply(d.get('ticket'), resume)
+                    value = app.apply(d.get('ticket'), environments.export_ui(resume))
                 elif action == 'restart': value = app.restart(d.get('ticket'))
-                elif action == 'restore': value = updater.restore_ui_state()
+                elif action == 'restore': value = environments.restore_ui(updater.restore_ui_state(app.resume_path))
                 elif action == 'status': value = app.status()
                 else: raise ValueError('업데이트 작업을 확인하세요.')
+            elif self.path == "/api/environments":
+                manager = self.server.environments
+                action = d.get('action', 'list')
+                if action == 'list': value = manager.list()
+                elif action == 'save': value = manager.save(d['profile'])
+                elif action == 'startup': value = manager.startup(d.get('profile', 'default'))
+                elif action == 'probe': value = manager.call(d.get('profile', 'default'), 'probe', {})
+                elif action in ('ssh-list', 'ssh-public', 'ssh-generate', 'ssh-test'):
+                    value = manager.call(d.get('profile', 'default'), action, d)
+                elif action == 'install': value = manager.install(d['kind'], d.get('directory', ''), d.get('distro', ''))
+                else: raise ValueError('환경 설정 작업을 확인하세요.')
             elif self.path == "/api/directories":
-                value = workspace_ops.directory_suggestions(d["path"])
+                value = self.server.environments.call(d.get('profile', 'default'), 'directories', d)
             elif self.path == "/api/open":
-                value = self.server.register(d["path"], exact=d.get("exact") is True)
+                value = self.server.register(d["path"], exact=d.get("exact") is True, profile=d.get('profile'))
             elif self.path == "/api/new":
-                value = self.server.register(workspace_ops.new_repository(d))
+                profile = d.get('profile', 'default')
+                value = self.server.register(self.server.environments.call(profile, 'new', d), profile=profile)
             elif self.path == "/api/close":
                 value = self.server.close_tab(d["repo"])
             elif self.path == "/api/select-tab":
@@ -180,30 +214,11 @@ class Handler(BaseHTTPRequestHandler):
                 with self.server.registry_lock:
                     value = list(self.server.repos)
             else:
-                root, lock = self.server.repos[d["repo"]]
-                with lock:
-                    if self.path == "/api/state":
-                        value = gitdesk.state(root, d.get("count", 150))
-                    elif self.path == "/api/detail":
-                        value = gitdesk.detail(root, d["rev"], d.get("base"))
-                    elif self.path == "/api/commit-context":
-                        value = commit_ops.context(root, d["rev"])
-                    elif self.path == "/api/rebase-plan":
-                        value = commit_ops.rebase_plan(root, d["rev"])
-                    elif self.path == "/api/export":
-                        value = commit_ops.export(root, d)
-                    elif self.path == "/api/diff":
-                        value = gitdesk.diff(root, d)
-                    elif self.path in ("/api/conflict","/api/resolve"):
-                        value = partial.conflict_file(root, d, resolve=self.path.endswith("resolve"))
-                    elif self.path == "/api/urls":
-                        value = workspace_ops.remote_urls(root)
-                    elif self.path in ("/api/lines", "/api/lines-apply"):
-                        value = partial.partial(root, d, apply=self.path.endswith("-apply"))
-                    elif self.path == "/api/action":
-                        value = gitdesk.act(root, d)
-                    else:
-                        return self.reply(404, {})
+                op = self.path.removeprefix('/api/')
+                if op not in ('state', 'detail', 'commit-context', 'rebase-plan', 'export', 'diff',
+                              'conflict', 'resolve', 'urls', 'lines', 'lines-apply', 'action'):
+                    return self.reply(404, {})
+                value = self.server.repo_call(d['repo'], op, d)
             response = {"value": value}
             if self.server.tab_warning:
                 response["warning"] = self.server.tab_warning
@@ -224,7 +239,7 @@ def open_page(url):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="WSL 저장소용 Git GUI")
+    parser = argparse.ArgumentParser(description="Windows·WSL 저장소용 Git GUI")
     parser.add_argument("repositories", nargs="*", metavar="REPO")
     parser.add_argument("--port", type=int, default=0)
     parser.add_argument("--no-browser", action="store_true")

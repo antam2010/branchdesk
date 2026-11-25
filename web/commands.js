@@ -54,7 +54,7 @@ function bindDirectoryPicker() {
     timer = setTimeout(async () => {
       let paths;
       try {
-        paths = await api('directories', {path});
+        paths = await api('directories', {path, profile: $('#repo-environment')?.value || 'default'});
       } catch {
         return; // A typed path can still be submitted.
       }
@@ -79,6 +79,7 @@ function bindDirectoryPicker() {
     suggest();
   }
   input.oninput = input.onfocus = suggest;
+  if ($('#repo-environment')) $('#repo-environment').onchange = () => { input.value = ''; close(); input.focus(); };
   input.onblur = close;
   list.onmousedown = event => event.preventDefault(); // Keep the text caret in the field.
   list.onclick = event => {
@@ -108,14 +109,16 @@ function bindDirectoryPicker() {
     }
   };
 }
-function repositoryDialog() {
-  const path = () => '<div><label for="repo-path">WSL 저장소 경로</label>' +
+async function repositoryDialog() {
+  try { await loadEnvironments(); } catch (error) { notice(error.message); return; }
+  const path = () => selectField('repo-environment', '실행 환경', environmentOptions(), s?.environment || 'default') + '<div><label for="repo-path">저장소 경로 (선택한 환경 기준)</label>' +
     '<input class="form-input" id="repo-path" role="combobox" aria-expanded="false" ' +
     'aria-autocomplete="list" aria-controls="repo-path-options" autocomplete="off" spellcheck="false" required>' +
     '<ul id="repo-path-options" role="listbox" aria-label="추천 폴더" hidden></ul></div>';
   const enter = async mode => {
     const input = {
       mode,
+      profile: valueOf('repo-environment'),
       path: valueOf('repo-path')
     };
     if (mode === 'clone') input.url = valueOf('repo-url');

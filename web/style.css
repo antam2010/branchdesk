@@ -914,3 +914,5 @@ dialog:has(.line-list), dialog:has(#resolution-text) { width:min(730px,92vw); }
   .split { grid-template-columns:minmax(0,1fr); grid-template-rows:var(--files-stacked-size,40%) 6px minmax(0,1fr); }
   [data-pane="files"] { cursor:row-resize; }
 }
+
+#environment-dialog{width:min(780px,92vw);max-height:88vh;overflow:auto} .environment-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px} #environment-dialog details{border-top:1px solid var(--border,#d4d8da);margin-top:16px;padding-top:12px} #environment-dialog summary{cursor:pointer;font-weight:600} #environment-dialog input,#environment-dialog select,#env-public-key{width:100%;box-sizing:border-box} #environment-dialog input[type=checkbox]{width:auto} #env-report{white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;overflow:auto} #env-message{min-height:2.5em} @media(max-width:650px){.environment-fields{grid-template-columns:1fr}}

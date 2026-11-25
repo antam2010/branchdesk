@@ -6,7 +6,7 @@ import stat
 import tempfile
 from pathlib import Path
 
-from gitdesk import GitError, changes, fields, git, line
+from gitdesk import GitError, changes, fields, git, line, valid_path
 
 LIMIT = 256 * 1024
 
@@ -21,7 +21,7 @@ def tree_entry(root, path):
 
 
 def snapshot(root, path, kind):
-    if not path or path.startswith("/") or ".." in Path(path).parts or kind not in ("index", "work"):
+    if not valid_path(path) or kind not in ("index", "work"):
         raise GitError("파일을 다시 선택하세요.")
     status = changes(root, path)
     if len(status)!=1 or status[0]["path"] != path:
@@ -49,7 +49,10 @@ def snapshot(root, path, kind):
             with tempfile.TemporaryDirectory(prefix="branchdesk-preview-") as tmp:
                 blob = line(git(root,"hash-object","-w","--",path,object_dir=tmp))
                 filtered = git(root,"cat-file","blob",blob,limit=LIMIT,object_dir=tmp)
-            other = ("100755" if st.st_mode & stat.S_IXUSR else "100644", blob)
+            mode = "100755" if st.st_mode & stat.S_IXUSR else "100644"
+            if line(git(root, "config", "--bool", "--get", "core.filemode", allowed=(0, 1))) == "false":
+                mode = index[0] if index else "100644"
+            other = (mode, blob)
     def content(entry,raw=None):
         if not entry:
             return []
@@ -116,19 +119,17 @@ def partial(root,data,apply=False):
         header+=b"deleted file mode "+index[0].encode()+b"\n"
         b=b"/dev/null"
     patch=difflib.diff_bytes(difflib.unified_diff,old,output,fromfile=a,tofile=b,n=max(len(old),len(output)))
-    with tempfile.NamedTemporaryFile() as tmp:
-        tmp.write(header)
-        for row in patch:
-            tmp.write(row)
-            if not row.endswith(b"\n"):
-                tmp.write(b"\n\\ No newline at end of file\n")
-        tmp.flush()
-        git(root,"apply","--cached","--whitespace=nowarn","--",tmp.name)
+    output_patch = bytearray(header)
+    for row in patch:
+        output_patch.extend(row)
+        if not row.endswith(b"\n"):
+            output_patch.extend(b"\n\\ No newline at end of file\n")
+    git(root,"apply","--cached","--whitespace=nowarn", input_data=bytes(output_patch))
 
 
 def conflict_file(root, data, resolve=False):
     path = data["path"]
-    if not path or path.startswith("/") or ".." in Path(path).parts:
+    if not valid_path(path):
         raise GitError("파일 경로를 확인하세요.")
     rows = fields(git(root, "ls-files", "-u", "-z", "--", path))
     entries = {}

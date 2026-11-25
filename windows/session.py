@@ -23,8 +23,12 @@ class PipeRequest:
 
 
 def main():
-    if sys.version_info < (3, 9) or not shutil.which("git"):
-        raise RuntimeError("WSL requires Python 3.9+ and Git.")
+    if sys.version_info < (3, 9):
+        raise RuntimeError("Python 3.9+ is required.")
+    if os.name == 'nt':
+        import msvcrt
+        msvcrt.setmode(sys.stdin.fileno(), os.O_BINARY)
+        msvcrt.setmode(sys.stdout.fileno(), os.O_BINARY)
     os.chdir(Path.home())
     source, dest = sys.stdin.buffer, sys.stdout.buffer
     port = int(source.readline(8))

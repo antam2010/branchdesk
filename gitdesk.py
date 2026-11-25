@@ -1,10 +1,6 @@
 """Git operations for one local worktree. Requires Python 3.9+ and Git 2.28+."""
 import os
 import re
-import selectors
-import signal
-import subprocess
-import time
 from pathlib import Path
 
 DIFF_LIMIT = 192 * 1024
@@ -15,50 +11,26 @@ class GitError(ValueError):
     pass
 
 
-def git(root, *args, allowed=(0,), limit=META_LIMIT, preview=False, timeout=90, editor="false", object_dir=None, sequence_editor=None):
+def git(root, *args, allowed=(0,), limit=META_LIMIT, preview=False, timeout=90, editor="false", object_dir=None, sequence_editor=None, input_data=None):
+    from environments import execution_settings
+    settings = execution_settings.get()
     env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_PAGER="cat",
                GIT_LITERAL_PATHSPECS="1", GIT_EDITOR=editor, GIT_MERGE_AUTOEDIT="no")
     if object_dir is not None:
         env["GIT_OBJECT_DIRECTORY"] = str(object_dir)
     if sequence_editor is not None:
         env["GIT_SEQUENCE_EDITOR"] = sequence_editor
-    command = ["git", "--no-pager", "-c", "color.ui=false", "-c", "core.quotepath=false",
+    env.update(settings.get("env", {}))
+    command = [settings.get("git") or "git", "--no-pager", "-c", "color.ui=false", "-c", "core.quotepath=false",
                "-C", os.fspath(root), *args]
-    proc = subprocess.Popen(command, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, start_new_session=True)
-    out, err = bytearray(), bytearray()
-    deadline = time.monotonic() + timeout
+    from process_utils import run
     try:
-        with selectors.DefaultSelector() as events:
-            for pipe, buf in ((proc.stdout, out), (proc.stderr, err)):
-                events.register(pipe, selectors.EVENT_READ, buf)
-            while events.get_map():
-                left = deadline - time.monotonic()
-                if left <= 0:
-                    raise GitError("Git 응답 시간이 초과되었습니다. 저장소 상태를 새로고침해 주세요.")
-                for key, _ in events.select(left):
-                    part = os.read(key.fd, 65536)
-                    if not part:
-                        events.unregister(key.fileobj)
-                        continue
-                    buf = key.data
-                    buf.extend(part)
-                    if len(buf) > limit:
-                        if preview and buf is out:
-                            return bytes(out[:limit]) + "\n… 미리보기 한도에 도달했습니다.".encode()
-                        raise GitError("결과가 표시 한도를 초과했습니다.")
-        if proc.wait(timeout=max(0.1, deadline-time.monotonic())) not in allowed:
-            raise GitError(bytes(err or out).decode(errors="replace").strip() or "Git 명령 실패")
-        return bytes(out)
-    finally:
-        if proc.poll() is None:
-            try:
-                os.killpg(proc.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            proc.wait()
-        proc.stdout.close()
-        proc.stderr.close()
+        code, out, err = run(command, env=env, data=input_data, timeout=timeout, limit=limit, preview=preview)
+    except ValueError as error:
+        raise GitError(str(error)) from error
+    if code not in allowed:
+        raise GitError((err or out).decode(errors="replace").strip() or "Git 명령 실패")
+    return out
 
 
 def decode(data):
@@ -153,9 +125,13 @@ def detail(root, rev, base=None):
     return dict(message=msg, files=[dict(code=k, path=v) for k, v in zip(raw[::2], raw[1::2])])
 
 
+def valid_path(path):
+    return isinstance(path, str) and bool(path) and "\x00" not in path and not Path(path).is_absolute() and not Path(path).drive and ".." not in Path(path).parts
+
+
 def diff(root, data):
     kind, path = data.get("kind"), data.get("path")
-    if not isinstance(path, str) or not path or path.startswith("/") or ".." in Path(path).parts:
+    if not valid_path(path):
         raise GitError("파일 경로가 올바르지 않습니다.")
     options = ["--no-ext-diff", "--no-textconv", "--no-color", "--no-renames"]
     if kind == "commit":
@@ -172,7 +148,7 @@ def diff(root, data):
                 return "별도 Git 저장소 디렉터리"
             if not entry.is_symlink() and not entry.is_file():
                 return "이 파일 형식은 미리보기를 지원하지 않습니다."
-            args = ["diff", "--no-index", *options, "--", "/dev/null", path]
+            args = ["diff", "--no-index", *options, "--", os.devnull, path]
         else:
             args = ["diff", *options, *(["--cached"] if kind == "index" else []), "--", path]
     else:

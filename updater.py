@@ -41,30 +41,33 @@ def get_json(path, limit=1024*1024):
 
 
 def wsl_path(path, windows=False):
+    if os.name == 'nt': return path
     return subprocess.check_output(['wslpath', '-w' if windows else '-u', path], text=True, timeout=10,
                                    stdin=subprocess.DEVNULL, stderr=subprocess.PIPE).strip()
 
 
 def state_root():
-    return Path(os.environ.get('XDG_STATE_HOME') or Path.home() / '.local/state') / 'branchdesk'
+    from environments import state_root as root
+    return root()
 
 
-def save_ui_state(data):
+def save_ui_state(data, path=None):
     payload = json.dumps(data, ensure_ascii=True)
     if len(payload.encode('utf-8')) > 1_000_000:
         raise ValueError('작성 중인 메시지가 너무 큽니다. 메시지를 저장한 뒤 업데이트를 적용하세요.')
-    folder = state_root(); folder.mkdir(parents=True, exist_ok=True)
+    path = path or state_root() / 'update-ui.json'
+    folder = path.parent; folder.mkdir(parents=True, exist_ok=True)
     fd, name = tempfile.mkstemp(prefix='update-ui-', dir=folder)
     try:
         with os.fdopen(fd, 'w', encoding='utf-8') as file:
             file.write(payload)
-        os.replace(name, folder / 'update-ui.json')
+        os.replace(name, path)
     finally:
         if os.path.exists(name): os.unlink(name)
 
 
-def restore_ui_state():
-    path = state_root() / 'update-ui.json'
+def restore_ui_state(path=None):
+    if path is None or not path.exists(): path = state_root() / 'update-ui.json'
     try:
         if path.stat().st_size > 1_000_000: return {}
         data = json.loads(path.read_text(encoding='utf-8'))
@@ -75,8 +78,9 @@ def restore_ui_state():
 
 
 class Updater:
-    def __init__(self, launcher=None):
+    def __init__(self, launcher=None, resume_path=None):
         self.launcher = launcher or {}
+        self.resume_path = resume_path
         self.supported = bool(self.launcher.get('pid', 0) > 0 and self.launcher.get('path') and self.launcher.get('signal'))
         self.lock = threading.RLock()
         self.state = {'state': 'idle', 'supported': self.supported}
@@ -171,7 +175,7 @@ class Updater:
                 if error_file.exists(): raise ValueError(error_file.read_text(encoding='utf-8-sig').strip())
                 if time.monotonic() > deadline: raise ValueError('업데이트 도우미를 시작하지 못했습니다. 현재 앱은 계속 사용할 수 있습니다.')
                 time.sleep(0.1)
-            save_ui_state(ui_state)
+            save_ui_state(ui_state, self.resume_path)
             self._set(state='restarting')
             return self.status()
         except Exception as error:
