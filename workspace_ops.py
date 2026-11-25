@@ -104,15 +104,17 @@ def launch_desktop(root, op):
             unc = subprocess.check_output(["wslpath", "-w", str(root)], text=True).rstrip("\n")
             command = ["explorer.exe", unc]
         else:
-            # The path stays a single Windows argument, even with spaces and shell punctuation.
-            arguments = subprocess.list2cmdline(["-d", os.environ["WSL_DISTRO_NAME"], "--cd", str(root)])
-            script = ("$ErrorActionPreference='Stop';"
-                      "$a=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([Console]::ReadLine()));"
-                      "Start-Process -FilePath ([IO.Path]::Combine([Environment]::SystemDirectory,'wsl.exe')) -ArgumentList $a")
-            import base64
-            subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
-                           input=base64.b64encode(arguments.encode())+b"\n", check=True, timeout=20,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+            # Start in the inherited worktree. Its name never becomes Terminal command syntax.
+            distro = os.environ["WSL_DISTRO_NAME"]
+            if ";" in distro:
+                raise GitError("Windows Terminal에서 이 배포판 이름을 사용할 수 없습니다.")
+            wt = shutil.which("wt.exe")
+            if not wt:
+                raise GitError("Windows Terminal(wt.exe)을 찾을 수 없습니다. Windows의 앱 실행 별칭을 확인하세요.")
+            subprocess.run([wt, "--window", "new", "new-tab", "--startingDirectory", ".",
+                            "wsl.exe", "--distribution", distro],
+                           cwd=root, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.PIPE, check=True, timeout=20)
             return
     else:
         command = ["xdg-open", str(root)] if op == "explorer" else ["x-terminal-emulator"]

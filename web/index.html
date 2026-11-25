@@ -1,9 +1,10 @@
-<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#132f33"><title>Branchdesk · Git 워크스페이스</title><link rel="stylesheet" href="/style.css"><script src="/commands.js" defer></script><script src="/app.js" defer></script></head>
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#132f33"><title>Branchdesk · Git 워크스페이스</title><link rel="stylesheet" href="/style.css"><script src="/panes.js" defer></script><script src="/commands.js" defer></script><script src="/app.js" defer></script></head>
 <body><header><div class="brand"><span class="logo">⑂</span> Branchdesk</div><span class="brandline"></span><span class="caption">Git 워크스페이스</span><span class="header-right"><i class="light"></i> 로컬 세션</span></header>
 <nav id="tabs" aria-label="저장소"></nav>
 <section id="toolbar" aria-label="Git 작업"></section>
-<div class="layout"><aside><div class="sect">워크스페이스</div><button id="go-log"></button><button id="go-work"></button><div id="nav-refs"></div></aside>
+<div class="layout"><aside><div class="sect">워크스페이스</div><button id="go-log"></button><button id="go-work"></button><div id="nav-refs"></div></aside><div class="pane-divider" data-pane="nav" role="separator" tabindex="0" aria-orientation="vertical" aria-label="사이드바 너비"></div>
 <main id="main"><section class="blank">저장소를 여는 중…</section></main></div>
 <footer><span id="foot-repo">Branchdesk</span><span id="foot-status" role="status"></span></footer>
 <dialog id="dialog"><form id="form"><div id="dialog-kind" class="sect">BRANCHDESK</div><h2 id="dialog-title"></h2><div id="dialog-body"></div><div class="dialog-actions"><button type="button" id="cancel">취소</button><button class="primary" id="confirm">확인</button></div></form></dialog>
+<dialog id="diff-popup" aria-labelledby="popup-file"><div class="popup-head"><h2 id="popup-file"></h2><form method="dialog"><button autofocus>닫기</button></form></div><div id="popup-patch" class="popup-patch" tabindex="0"></div></dialog>
 <div id="toast" role="alert" hidden></div></body></html>

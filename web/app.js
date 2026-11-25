@@ -202,7 +202,7 @@ function drawRows() {
   }).join("") || empty(needle ? "불러온 커밋에서 검색 결과가 없습니다." : "첫 커밋을 만들면 이곳에 표시됩니다.");
 }
 function historyView() {
-  $("#main").innerHTML = head("히스토리", true) + (rev ? '<div class="compare-bar"><button id="compare-pin">' + (waitingForEnd ? '대상 커밋 선택 중…' : '비교 시작점 지정') + '</button>' + (compareBase ? '<span>' + esc(compareBase.slice(0, 8)) + ' → ' + (waitingForEnd ? '그래프에서 대상 선택' : esc(rev.slice(0, 8))) + '</span><button id="compare-clear">비교 해제</button>' : '<span>두 번째 커밋을 Ctrl 또는 Shift와 함께 클릭해 비교</span>') + '<button class="right" id="cherry">체리픽</button></div>' : '') + '<div class="history"><div class="table"><div class="loghead"><span>그래프</span><span>커밋 메시지</span><span>작성자</span><span>날짜</span><span>커밋</span></div><div id="rows"></div></div>' + (s.more && limit < 5000 ? '<button class="more" id="more">이전 커밋 더 보기 ↓</button>' : '') + '</div><section class="inspect" id="inspect"></section>';
+  $("#main").innerHTML = head("히스토리", true) + (rev ? '<div class="compare-bar"><button id="compare-pin">' + (waitingForEnd ? '대상 커밋 선택 중…' : '비교 시작점 지정') + '</button>' + (compareBase ? '<span>' + esc(compareBase.slice(0, 8)) + ' → ' + (waitingForEnd ? '그래프에서 대상 선택' : esc(rev.slice(0, 8))) + '</span><button id="compare-clear">비교 해제</button>' : '<span>두 번째 커밋을 Ctrl 또는 Shift와 함께 클릭해 비교</span>') + '<button class="right" id="cherry">체리픽</button></div>' : '') + '<div class="history-panes"><div class="history"><div class="table"><div class="loghead"><span>그래프</span><span>커밋 메시지</span><span>작성자</span><span>날짜</span><span>커밋</span></div><div id="rows"></div></div>' + (s.more && limit < 5000 ? '<button class="more" id="more">이전 커밋 더 보기 ↓</button>' : '') + '</div>' + separator('history') + '<section class="inspect" id="inspect"></section></div>';
   graph = graphData(s.commits);
   labels = new Map();
   for (const r of s.refs) {
@@ -213,8 +213,30 @@ function historyView() {
   drawRows();
   if (rev) loadDetail();else $("#inspect").innerHTML = empty("선택한 커밋이 없습니다.");
 }
-function fileRow(f, i, editable) {
-  return '<div class="file ' + (selected?.kind === f.kind && selected?.path === f.path ? 'selected' : '') + '"><button data-file="' + i + '" title="' + esc(f.path) + '"><span class="status-code code-' + esc(f.code) + '">' + esc(f.code) + '</span><span class="ellipsis">' + esc(f.path) + '</span></button>' + (editable ? '<button class="toggle" data-toggle="' + i + '" title="' + (f.kind === "index" ? "스테이징 해제" : "스테이징") + '" aria-label="' + esc(f.path) + (f.kind === "index" ? ' 스테이징 해제">−' : ' 스테이징">+') + '</button>' : '') + '</div>';
+let treeView = false;
+function fileRow(f, i, editable, label = f.path) {
+  return '<div class="file ' + (selected?.kind === f.kind && selected?.path === f.path ? 'selected' : '') + '"><button data-file="' + i + '" title="' + esc(f.path) + '"><span class="status-code code-' + esc(f.code) + '">' + esc(f.code) + '</span><span class="ellipsis">' + esc(label) + '</span></button>' + (editable ? '<button class="toggle" data-toggle="' + i + '" title="' + (f.kind === "index" ? "스테이징 해제" : "스테이징") + '" aria-label="' + esc(f.path) + (f.kind === "index" ? ' 스테이징 해제">−' : ' 스테이징">+') + '</button>' : '') + '</div>';
+}
+function treeRows(entries, editable) {
+  const node = () => ({folders: new Map(), files: []});
+  const root = node();
+  for (const {f, i} of entries) {
+    const parts = f.path.split("/");
+    const name = parts.pop();
+    let parent = root;
+    for (const part of parts) {
+      if (!parent.folders.has(part)) parent.folders.set(part, node());
+      parent = parent.folders.get(part);
+    }
+    parent.files.push(fileRow(f, i, editable, name));
+  }
+  function draw(parent) {
+    const folders = Array.from(parent.folders, ([name, child]) =>
+      '<details class="file-folder" open><summary>' + icon("folder") + esc(name) +
+      '</summary><div>' + draw(child) + '</div></details>');
+    return folders.join("") + parent.files.join("");
+  }
+  return draw(root);
 }
 function filesHtml(group, editable) {
   const entries = fileList.map((f, i) => ({
@@ -226,13 +248,13 @@ function filesHtml(group, editable) {
     work: "스테이징하지 않은 파일",
     commit: "변경 파일"
   }[group];
-  return '<div class="subhead">' + title + ' <span>' + entries.length + '</span>' + (editable && entries.length ? '<button data-all="' + group + '">' + (group === "work" ? "모두 스테이지" : "모두 해제") + '</button>' : '') + '</div>' + (entries.map(({
-    f,
-    i
-  }) => fileRow(f, i, editable)).join("") || empty("파일 없음"));
+  return '<div class="subhead">' + title + ' <span>' + entries.length + '</span>' + (editable && entries.length ? '<button data-all="' + group + '">' + (group === "work" ? "모두 스테이지" : "모두 해제") + '</button>' : '') + '</div>' + ((treeView ? treeRows(entries, editable) : entries.map(({f, i}) => fileRow(f, i, editable)).join("")) || empty("파일 없음"));
 }
 function paintFiles() {
-  $(".files").innerHTML = mode === "work" ? filesHtml("index", true) + filesHtml("work", true) : filesHtml("commit", false);
+  const choices = '<div class="file-views" role="group" aria-label="변경 파일 보기">' +
+    '<button data-file-view="list" aria-pressed="' + !treeView + '">목록</button>' +
+    '<button data-file-view="tree" aria-pressed="' + treeView + '">트리</button></div>';
+  $(".files").innerHTML = choices + (mode === "work" ? filesHtml("index", true) + filesHtml("work", true) : filesHtml("commit", false));
 }
 async function loadDetail() {
   const serial = ++detailSeq;
@@ -246,7 +268,7 @@ async function loadDetail() {
     });
     if (serial !== detailSeq || mode !== "history" || !pane.isConnected) return;
     const c = s.commits.find(c => c.id === rev);
-    pane.innerHTML = '<div class="commit-head"><div class="meta"><span class="badge">' + (compareBase && !waitingForEnd ? "두 커밋 비교" : "커밋") + '</span><span class="hash">' + rev.slice(0, 10) + '</span>' + esc(c ? [c.author, c.date.slice(0, 10)].join(" · ") : "") + '</div><div class="commit-title">' + esc(compareBase && !waitingForEnd ? compareBase.slice(0, 10) + " → " + rev.slice(0, 10) + " · " + detail.files.length + "개 변경 파일" : detail.message) + '</div></div><div class="split"><div class="files"></div><div class="diff"></div></div>';
+    pane.innerHTML = '<div class="commit-head"><div class="meta"><span class="badge">' + (compareBase && !waitingForEnd ? "두 커밋 비교" : "커밋") + '</span><span class="hash">' + rev.slice(0, 10) + '</span>' + esc(c ? [c.author, c.date.slice(0, 10)].join(" · ") : "") + '</div><div class="commit-title">' + esc(compareBase && !waitingForEnd ? compareBase.slice(0, 10) + " → " + rev.slice(0, 10) + " · " + detail.files.length + "개 변경 파일" : detail.message) + '</div></div><div class="split"><div class="files"></div>' + separator('files') + '<div class="diff"></div></div>';
     fileList = detail.files.map(f => ({
       ...f,
       kind: "commit"
@@ -256,6 +278,27 @@ async function loadDetail() {
     showDiff();
   } catch (e) {
     if (serial === detailSeq && pane.isConnected) pane.innerHTML = empty(e.message);
+  }
+}
+let previewRequest;
+function patchHtml(patch) {
+  const lines = patch.split("\n"), shown = lines.slice(0, 3000);
+  return patch ? '<div class="patch">' + shown.map(l => {
+      const cls = /^(diff |index |--- |\+\+\+ |new file|deleted file|old mode|new mode)/.test(l) ? "pmeta" : l.startsWith("@@") ? "hunk" : l.startsWith("+") ? "plus" : l.startsWith("-") ? "minus" : "";
+      return '<div class="' + cls + '">' + (esc(l) || " ") + '</div>';
+    }).join("") + '</div>' + (lines.length > shown.length ? empty("처음 3,000줄까지 표시합니다.") : "") : empty("표시할 텍스트 변경이 없습니다.");
+}
+async function expandDiff() {
+  if (!selected || !previewRequest) return;
+  const popup = $("#diff-popup"), request = previewRequest;
+  $("#popup-file").textContent = selected.path;
+  $("#popup-patch").innerHTML = empty("비교 내용을 불러오는 중…");
+  popup.showModal();
+  try {
+    const patch = await request;
+    if (popup.open && request === previewRequest) $("#popup-patch").innerHTML = patchHtml(patch);
+  } catch (error) {
+    if (popup.open && request === previewRequest) $("#popup-patch").innerHTML = empty(error.message);
   }
 }
 async function showDiff() {
@@ -269,19 +312,17 @@ async function showDiff() {
   }
   pane.innerHTML = empty("비교 내용을 불러오는 중…");
   try {
-    const patch = await api("diff", {
+    previewRequest = api("diff", {
       rev,
       base: waitingForEnd ? "" : compareBase,
       kind: f.kind,
       path: f.path
     });
+    const patch = await previewRequest;
     if (serial !== diffSeq || !pane.isConnected) return;
-    const lines = patch.split("\n"),
-      shown = lines.slice(0, 3000);
-    pane.innerHTML = '<div class="subhead">' + icon("file") + '<span class="ellipsis" title="' + esc(f.path) + '">' + esc(f.path) + '</span>' + (mode === "work" ? '<button id="partial">' + (f.code === "U" ? '충돌 해결' : '줄 선택') + '</button>' : '') + '</div>' + (patch ? '<div class="patch">' + shown.map(l => {
-      const cls = /^(diff |index |--- |\+\+\+ |new file|deleted file|old mode|new mode)/.test(l) ? "pmeta" : l.startsWith("@@") ? "hunk" : l.startsWith("+") ? "plus" : l.startsWith("-") ? "minus" : "";
-      return '<div class="' + cls + '">' + (esc(l) || " ") + '</div>';
-    }).join("") + '</div>' + (lines.length > shown.length ? empty("처음 3,000줄까지 표시합니다.") : "") : empty("표시할 텍스트 변경이 없습니다."));
+    pane.innerHTML = '<div class="subhead">' + icon("file") + '<span class="ellipsis" title="' + esc(f.path) + '">' + esc(f.path) +
+      '</span><button id="expand-diff">크게 보기</button>' + (mode === "work" ? '<button id="partial">' + (f.code === "U" ? '충돌 해결' : '줄 선택') + '</button>' : '') +
+      '</div>' + patchHtml(patch);
   } catch (e) {
     if (serial === diffSeq && pane.isConnected) pane.innerHTML = empty(e.message);
   }
@@ -301,7 +342,7 @@ function workView() {
   }));
   fileList = [...indexed, ...work];
   selected = fileList.find(f => f.kind === selected?.kind && f.path === selected?.path) || fileList[0] || null;
-  $("#main").innerHTML = head("파일 상태") + (s.progress ? '<div class="compare-bar">' + esc(s.progress) + ' 진행 중 <button id="proceed">계속</button><button id="abort">중단</button></div>' : '') + '<div class="split work-split"><div class="files"></div><div class="diff"></div></div><div class="composer"><label>커밋 메시지<textarea id="message" placeholder="변경 내용을 입력하세요"></textarea></label>' + (s.head && !s.progress ? checkField("amend", "마지막 커밋 수정") : "") + '<button class="primary" id="do-commit">커밋</button></div>';
+  $("#main").innerHTML = head("파일 상태") + (s.progress ? '<div class="compare-bar">' + esc(s.progress) + ' 진행 중 <button id="proceed">계속</button><button id="abort">중단</button></div>' : '') + '<div class="split work-split"><div class="files"></div>' + separator('files') + '<div class="diff"></div></div><div class="composer"><label>커밋 메시지<textarea id="message" placeholder="변경 내용을 입력하세요"></textarea></label>' + (s.head && !s.progress ? checkField("amend", "마지막 커밋 수정") : "") + '<button class="primary" id="do-commit">커밋</button></div>';
   $("#message").value = drafts.get(repo) || "";
   enableCommit();
   paintFiles();
@@ -539,9 +580,19 @@ function clickAction(e) {
     } else selectRev(d.rev);
     return;
   }
-  if (d.file !== undefined) {
-    selected = fileList[Number(d.file)];
+  if (d.fileView !== undefined) {
+    treeView = d.fileView === "tree";
     paintFiles();
+    $(".file-views [aria-pressed=true]").focus();
+    return;
+  }
+  if (el.id === "expand-diff") return expandDiff();
+  if (d.file !== undefined) {
+    const next = fileList[Number(d.file)];
+    if (selected === next) return;
+    selected = next;
+    $(".files .file.selected")?.classList.remove("selected");
+    el.closest(".file").classList.add("selected");
     showDiff();
     return;
   }
@@ -560,6 +611,10 @@ function clickAction(e) {
   }));
 }
 document.addEventListener("click", clickAction);
+$("#diff-popup").addEventListener("close", () => $("#popup-patch").replaceChildren());
+document.addEventListener("dblclick", event => {
+  if (!busy && event.target.closest("button[data-file]")) expandDiff();
+});
 document.addEventListener("input", e => {
   if (e.target.id === "search") {
     query = e.target.value;

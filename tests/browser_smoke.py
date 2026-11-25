@@ -22,7 +22,7 @@ def run(base):
     git("config","commit.gpgsign","false")
     (repo/"sample.txt").write_text("line 1\n")
     git("add",".");git("commit","-m","first");first=git("rev-parse","HEAD")
-    (repo/"another.txt").write_text("added\n");git("add",".");git("commit","-m","second")
+    (repo/"src").mkdir();(repo/"src"/"another.txt").write_text("added\n");git("add",".");git("commit","-m","second")
     (repo/"sample.txt").write_text("line 1\nline 2\n");git("add",".");git("commit","-m","third")
     last=git("rev-parse","HEAD")
     bare=base/"remote.git"
@@ -83,6 +83,29 @@ def run(base):
                 expect(loc(".file")).to_have_count(2)
                 loc("button[data-file]").filter(has_text="sample.txt").click()
                 expect(loc(".patch")).to_contain_text("+line 2")
+                click('[data-file-view="tree"]')
+                expect(loc(".file-folder summary")).to_have_text("src")
+                loc('.file-folder button[data-file]').dblclick()
+                expect(loc("#diff-popup")).to_be_visible()
+                expect(loc("#popup-file")).to_have_text("src/another.txt")
+                expect(loc("#popup-patch")).to_contain_text("+added")
+                page.keyboard.press("Escape")
+                expect(loc("#diff-popup")).not_to_be_visible()
+                click('[data-file-view="list"]')
+                expect(loc("[data-file]").filter(has_text="src/another.txt")).to_be_visible()
+                for name, pane, key, axis in [
+                    ("nav", "aside", "ArrowRight", "width"),
+                    ("files", ".files", "ArrowRight", "width"),
+                    ("history", ".history", "ArrowDown", "height"),
+                ]:
+                    before = loc(pane).bounding_box()[axis]
+                    loc('[data-pane="'+name+'"]').press(key)
+                    assert loc(pane).bounding_box()[axis] > before
+                bar = loc('[data-pane="files"]').bounding_box()
+                x, y = bar["x"] + bar["width"]/2, bar["y"] + 10
+                before = loc(".files").bounding_box()["width"]
+                page.mouse.move(x,y);page.mouse.down();page.mouse.move(x+55,y);page.mouse.up()
+                assert loc(".files").bounding_box()["width"] > before
                 click("#compare-clear")
                 tool("fetch");loc("#fetch-remote").select_option("origin")
                 loc("#fetch-prune").check();loc("#fetch-tags").check();submit()
@@ -91,7 +114,11 @@ def run(base):
                 tool("branch");fill("#new-name","try-ui");submit()
                 expect(loc(".head-branch")).to_have_text("try-ui")
                 (repo/"sample.txt").write_text("line 1\nline 2\npart one\npart two\n")
-                tool("refresh");click("#go-work");click("#partial")
+                tool("refresh");click("#go-work")
+                loc("button[data-file]").filter(has_text="sample.txt").dblclick()
+                expect(loc("#popup-patch")).to_contain_text("+part one")
+                loc("#diff-popup button").click()
+                click("#partial")
                 loc(".pick-line").filter(has_text="part one").locator("input").check();submit()
                 assert git("show",":sample.txt").endswith("part one")
                 fill("#message","UI partial commit");click("#do-commit")
@@ -120,7 +147,7 @@ def run(base):
                 page.locator("#main [data-recent]").filter(has_text=str(repo)).click()
                 expect(loc(".repo-tab.active")).to_have_text(repo.name)
                 assert not errors,errors
-                print("PASS Chromium: directory autocomplete (mouse, keyboard, nested paths), open, two-commit diff, fetch options, remote URLs, branch, partial stage, commit, stash pop, tag, push/pull, Git Flow, clone and tabs.",flush=True)
+                print("PASS Chromium: directory autocomplete (mouse, keyboard, nested paths), open, two-commit diff, fetch options, remote URLs, branch, partial stage, commit, stash pop, tag, push/pull, Git Flow, clone tabs, recent repositories, tree/list, expanded diff, keyboard and pointer resizing.",flush=True)
             except Exception:
                 print(page.locator("body").inner_text()[-3500:],flush=True)
                 print("Page errors:",errors,flush=True)

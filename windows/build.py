@@ -9,7 +9,7 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FILES = ["branchdesk.py", "tab_store.py", "gitdesk.py", "web/app.js", "web/index.html",
+FILES = ["branchdesk.py", "tab_store.py", "gitdesk.py", "web/app.js", "web/panes.js", "web/index.html",
          "web/style.css", "workspace_ops.py", "partial.py", "web/commands.js", "windows/session.py"]
 
 

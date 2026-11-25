@@ -182,11 +182,10 @@ class ExtendedTests(unittest.TestCase):
         self.assertEqual(self.g("show","HEAD:notes"),"merged")
 
     def test_desktop_arguments(self):
-        with patch.dict(os.environ,{"WSL_DISTRO_NAME":"Ubuntu"}), patch("workspace_ops.subprocess.run") as run:
-            self.act("terminal")
-            import base64
-            args=base64.b64decode(run.call_args.kwargs["input"]).decode()
-            self.assertEqual(args,subprocess.list2cmdline(["-d","Ubuntu","--cd",str(self.root)]))
+        with patch.dict(os.environ, {"WSL_DISTRO_NAME": "Ubuntu"}), patch("workspace_ops.shutil.which", return_value="/mnt/c/bin/wt.exe"), patch("workspace_ops.subprocess.run") as run:
+            ops.launch_desktop(self.root / "공백 ; 폴더", "terminal")
+            self.assertEqual(run.call_args.args[0], ["/mnt/c/bin/wt.exe", "--window", "new", "new-tab", "--startingDirectory", ".", "wsl.exe", "--distribution", "Ubuntu"])
+            self.assertEqual(run.call_args.kwargs["cwd"], self.root / "공백 ; 폴더")
         with patch.dict(os.environ,{"WSL_DISTRO_NAME":"Ubuntu"}), patch("workspace_ops.shutil.which",return_value="explorer.exe"), patch("workspace_ops.subprocess.check_output",return_value="WSL path\n"), patch("workspace_ops.subprocess.Popen") as spawn:
             self.act("explorer");self.assertEqual(spawn.call_args.args[0],["explorer.exe","WSL path"])
 

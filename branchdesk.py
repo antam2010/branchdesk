@@ -19,7 +19,7 @@ import workspace_ops
 from tab_store import TabStore
 
 WEB = Path(__file__).resolve().parent / "web"
-ASSETS = {"/": "index.html", "/app.js": "app.js", "/commands.js": "commands.js", "/style.css": "style.css"}
+ASSETS = {"/panes.js": "panes.js", "/": "index.html", "/app.js": "app.js", "/commands.js": "commands.js", "/style.css": "style.css"}
 
 
 class Desk(ThreadingHTTPServer):
