@@ -4,6 +4,8 @@ import json
 import os
 from pathlib import Path
 import struct
+import shutil
+import subprocess
 import tempfile
 import threading
 import unittest
@@ -22,6 +24,14 @@ def executable(marker):
 
 
 class UpdaterTests(unittest.TestCase):
+    def test_powershell_helper_updates_existing_pointer_and_recovers_from_failures(self):
+        powershell = os.environ.get('BRANCHDESK_POWERSHELL') or shutil.which('powershell.exe') or shutil.which('pwsh')
+        if not powershell: self.skipTest('PowerShell is required for real helper filesystem checks')
+        script = Path(__file__).resolve().parents[1] / 'windows/test-update.ps1'
+        result = subprocess.run([powershell, '-NoProfile', '-File', str(script)], capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('PASS:', result.stdout)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)

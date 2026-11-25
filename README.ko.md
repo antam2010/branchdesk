@@ -45,6 +45,8 @@ EXE는 Windows의 `127.0.0.1`에서만 연결을 받고, 선택한 Python 프로
 
 이 업데이트 기능을 처음 받는 한 번은 앱을 종료하고 `git pull`한 뒤 새 EXE를 실행한다. 이후에는 창 오른쪽 위의 **앱 업데이트 → 새 버전 받기 → 적용 후 재시작**을 사용한다.
 
+이전 업데이트 도우미에서 `Replace`의 인수 3개 호출 중 경로 형식 오류가 발생하면, 앱을 종료하고 `git pull`한 뒤 저장소 폴더의 새 `Branchdesk.exe`를 한 번 실행한다. 오류가 있는 이전 도우미는 같은 업데이트 버튼으로 자체 수정본을 적용할 수 없다. 저장소 파일에는 영향이 없다.
+
 - 버전 확인과 다운로드는 백그라운드에서 진행한다. 창을 닫아두고 Git 작업을 계속할 수 있다.
 - **적용 후 재시작**을 누르면 파일 검증과 Windows 도우미 준비를 마친 뒤 현재 앱 창이 닫히고 새 버전이 자동으로 열린다. 열어둔 저장소·마지막 저장소와 작성 중인 커밋 메시지를 복원한다. Windows/WSL 시작 환경을 바꿔도 업데이트 복원 정보는 Windows 사용자 폴더의 공통 위치를 통해 이어받는다.
 - GitHub `antam2010/branchdesk`의 `main`에 있는 EXE를 커밋과 파일 해시에 고정해 받는다. 받은 파일의 Git blob 해시와 Windows 설치 시 SHA-256을 확인한다.
@@ -176,7 +178,10 @@ BRANCHDESK_EXE=./Branchdesk.exe python3 tests/browser_smoke.py
 
 Windows에서 EXE 시작·종료를 자동 점검할 때는 clone한 폴더에서 PowerShell로 아래 명령을 실행한다. 테스트가 연 Edge 창과 WSL API 응답을 확인하고 창을 닫은 뒤 서버 종료를 점검한다.
 
+업데이트 도우미 회귀 테스트는 실제 PowerShell과 임시 파일로 최초·반복 업데이트, 교체 실패 복구, 실행 실패 롤백을 확인한다. 프로세스 실행과 대화상자는 대체하므로 설치된 앱을 실행·종료·업데이트하지 않는다. Python 테스트도 PowerShell이 있으면 실행하며, `BRANCHDESK_POWERSHELL`로 실행 파일을 지정할 수 있다.
+
 ```powershell
+.\windows\test-update.ps1
 .\windows\test-launch.ps1
 ```
 
