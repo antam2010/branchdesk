@@ -640,7 +640,12 @@ $("#form").onsubmit = e => {
 };
 exclusive(async () => {
   const workspace = await api("workspace");
+  const resume = await api('app-update', {action: 'restore'});
+  for (const [path, message] of resume.drafts || []) if (typeof path === 'string' && typeof message === 'string') drafts.set(path, message);
   repos = workspace.repos;
   if (!repos.length) await loadRecent();
-  if (repos.length) await refresh(workspace.active || repos[0]);else render();
+  if (repos.length) {
+    await refresh(repos.includes(resume.repo) ? resume.repo : workspace.active || repos[0]);
+    if (resume.mode === 'work') switchMode('work');
+  } else render();
 });

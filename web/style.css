@@ -123,6 +123,11 @@ dialog:has(.rebase-plan) { width:min(780px,94vw); }
   gap: 8px;
 }
 
+#app-update-open { color:#e7f8f0; border:1px solid #6d9891; padding:4px 9px; margin-right:10px; font-size:12px; }
+#app-update-open:hover { background:#2b5657; }
+#app-update-dialog { width:min(560px,92vw); }
+#app-update-release { color:var(--muted); overflow-wrap:anywhere; }
+
 .light {
   width: 7px;
   height: 7px;

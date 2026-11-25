@@ -198,7 +198,7 @@ function fitCommitMenu() {
   commitMenu.style.top = Math.max(6, Math.min(Number(commitMenu.dataset.y), innerHeight - box.height - 6)) + 'px';
 }
 async function openCommitMenu(row, x, y) {
-  if (busy || !s || $('#dialog').open || $('#diff-popup').open) return;
+  if (busy || !s || document.querySelector('dialog[open]')) return;
   const selectedRepo = repo, id = row.dataset.rev;
   selectRev(id);
   createContextSurface(document.querySelector('.logrow[data-rev="' + id + '"]'), x, y, '커밋 작업');
@@ -377,11 +377,11 @@ document.addEventListener('keydown', event => {
   if ((event.shiftKey && event.key === 'F10') || event.key === 'ContextMenu') {
     event.preventDefault(); const box = event.target.getBoundingClientRect(); openApplicationContext(event.target, box.x + 20, box.bottom); return;
   }
-  if (!commitMenu && event.key === 'F5' && !event.ctrlKey && !event.altKey && !event.shiftKey && !$('#dialog').open && !$('#diff-popup').open) {
+  if (!commitMenu && event.key === 'F5' && !event.ctrlKey && !event.altKey && !event.shiftKey && !document.querySelector('dialog[open]')) {
     event.preventDefault(); if (s && !busy) exclusive(() => refresh()); return;
   }
   if (!commitMenu) {
-    if (event.ctrlKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'd' && mode === 'history' && rev && !busy && !$('#dialog').open && !event.target.closest('input,textarea,select')) {
+    if (event.ctrlKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'd' && mode === 'history' && rev && !busy && !document.querySelector('dialog[open]') && !event.target.closest('input,textarea,select')) {
       event.preventDefault();
       exclusive(async () => {
         const ctx = {...await api('commit-context', {rev}), repo};

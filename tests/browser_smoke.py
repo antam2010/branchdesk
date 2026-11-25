@@ -60,6 +60,25 @@ def run(base):
             def operation(name):
                 loc("#operation").select_option(name)
             try:
+                # An update can download while repository work continues; apply sends a draft snapshot.
+                click('#app-update-open')
+                expect(loc('#app-update-status')).to_contain_text('Windows EXE')
+                click('#app-update-close')
+                update_state = {'state': 'available', 'supported': True, 'ticket': 'test-update', 'summary': 'Test update'}
+                update_calls = []
+                def update_api(route):
+                    request = route.request.post_data_json
+                    action = request.get('action')
+                    update_calls.append(request)
+                    if action == 'download': update_state['state'] = 'downloading'
+                    if action in ('apply', 'restart'): update_state['state'] = 'restarting'
+                    route.fulfill(json={'value': update_state})
+                page.route('**/api/app-update', update_api)
+                click('#app-update-open'); click('#app-update-check')
+                expect(loc('#app-update-download')).to_be_visible()
+                click('#app-update-download')
+                expect(loc('#app-update-status')).to_contain_text('내려받고')
+                click('#app-update-close')
                 click("#open-empty")
                 path_input = loc("#repo-path")
                 page.context.grant_permissions(['clipboard-read', 'clipboard-write'])
@@ -87,6 +106,22 @@ def run(base):
                 expect(loc("#dialog")).to_be_visible()
                 submit()
                 expect(loc(".logrow")).to_have_count(3)
+                click('#go-work'); fill('#message', 'draft survives app update')
+                expect(loc('body')).not_to_have_class('busy')
+                update_state['state'] = 'ready'
+                expect(loc('#app-update-open')).to_have_text('업데이트 적용')
+                click('#app-update-open'); click('#app-update-apply')
+                expect(loc('#app-update-status')).to_contain_text('다시 여는 중')
+                page.wait_for_function("!document.body.classList.contains('busy')")
+                applied = next(call for call in update_calls if call['action'] == 'apply')
+                assert applied['ui']['drafts'] == [[str(repo), 'draft survives app update']]
+                assert applied['ui']['mode'] == 'work'
+                assert any(call['action'] == 'restart' for call in update_calls)
+                click('#app-update-close')
+                # The real Windows process restart is deliberately stubbed in this Linux browser test.
+                page.unroute('**/api/app-update', update_api)
+                page.evaluate("appUpdate={state:'current'};paintAppUpdate()")
+                fill('#message', ''); click('#go-log')
                 origin = page.evaluate('performance.timeOrigin')
                 page.keyboard.press('F5')
                 expect(loc('body')).not_to_have_class('busy')
@@ -269,7 +304,7 @@ def run(base):
                 page.locator("#main [data-recent]").filter(has_text=str(repo)).click()
                 expect(loc(".repo-tab.active")).to_have_text(repo.name)
                 assert not errors,errors
-                print("PASS Chromium: desktop menus across workspace/tabs/branches/files/inputs, browser menu suppression, clipboard cut/copy/paste/undo, hover/keyboard submenus, commit actions, ZIP/patch downloads, reset confirmation, rebase plan, and existing Git workflows.",flush=True)
+                print("PASS Chromium: background app-update UI, Git work during download, apply/restart requests with draft snapshot (Windows restart mocked), desktop menus, clipboard, submenus, commit actions, exports, reset confirmation, rebase plan, and existing Git workflows.",flush=True)
             except Exception:
                 print(page.locator("body").inner_text()[-3500:],flush=True)
                 print("Page errors:",errors,flush=True)

@@ -8,6 +8,7 @@
 #include "setup.h"
 
 static HICON app_icon_big=NULL, app_icon_small=NULL;
+static WCHAR launcher_path[MAX_PATH]={0}, update_signal[MAX_PATH]={0};
 
 /* Only the data pipe crosses into WSL. Git paths never pass through Win32. */
 static const WCHAR bootstrap[] =
@@ -64,10 +65,13 @@ static BOOL write_all(HANDLE pipe, const unsigned char *data, DWORD n) {
 
 /* A dedicated writer keeps a WSL cold start from blocking the startup timeout. */
 static DWORD WINAPI send_payload(void *pipe) {
-    char port[12];
-    int n=wsprintfA(port,"%u\n",(unsigned)desktop_port);
+    char port[64];
+    int n=wsprintfA(port,"%u\n%u\n%u\n%u\n",(unsigned)desktop_port,(unsigned)GetCurrentProcessId(),
+                   (unsigned)lstrlenW(launcher_path),(unsigned)lstrlenW(update_signal));
     return write_all((HANDLE)pipe,payload,(DWORD)sizeof(payload)) &&
-        write_all((HANDLE)pipe,(const unsigned char *)port,(DWORD)n)?0:1;
+        write_all((HANDLE)pipe,(const unsigned char *)port,(DWORD)n) &&
+        write_all((HANDLE)pipe,(const unsigned char *)launcher_path,(DWORD)lstrlenW(launcher_path)*2) &&
+        write_all((HANDLE)pipe,(const unsigned char *)update_signal,(DWORD)lstrlenW(update_signal)*2)?0:1;
 }
 static BOOL ready_url(const char *line, WCHAR *url) {
     const char *prefix="BRANCHDESK/2 ";
@@ -115,7 +119,7 @@ static BOOL temp_profile(WCHAR *path) {
     return append(path,MAX_PATH-1,base) && append(path,MAX_PATH-1,suffix) && CreateDirectoryW(path,NULL);
 }
 /* Only the official WSL installer requests UAC; the helper stays unelevated. */
-static BOOL ensure_prerequisites(const WCHAR *directory) {
+static int ensure_prerequisites(const WCHAR *directory) {
     WCHAR script[MAX_PATH]={0}, powershell[MAX_PATH], cmd[2048]={0};
     HANDLE file=NULL;
     PROCESS_INFORMATION process={0};
@@ -131,7 +135,8 @@ static BOOL ensure_prerequisites(const WCHAR *directory) {
     DWORD n=GetSystemDirectoryW(powershell,MAX_PATH);
     if(!n || n>=MAX_PATH || !append(powershell,MAX_PATH,L"\\WindowsPowerShell\\v1.0\\powershell.exe")) goto done;
     if(!append(cmd,2048,L"powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"") ||
-       !append(cmd,2048,script) || !append(cmd,2048,L"\"")) goto done;
+       !append(cmd,2048,script) || !append(cmd,2048,L"\" -Launcher \"") ||
+       !append(cmd,2048,launcher_path) || !append(cmd,2048,L"\"")) goto done;
     if(!CreateProcessW(powershell,cmd,NULL,NULL,FALSE,CREATE_NO_WINDOW,NULL,NULL,&si,&process)) goto done;
     launched=TRUE;
     close_handle(&process.hThread);
@@ -142,9 +147,9 @@ done:
     close_handle(&process.hProcess);
     if(script[0]) DeleteFileW(script);
     if(!launched) alert(L"시작 준비 화면을 열지 못했습니다. Windows PowerShell 실행 정책이나 보안 프로그램 차단 여부를 확인하세요.");
-    else if(code!=0 && code!=2 && code!=3 && code!=10)
+    else if(code!=0 && code!=2 && code!=3 && code!=10 && code!=20)
         alert(L"시작 준비 도우미가 실행되지 않았습니다. Windows PowerShell 실행 정책이나 보안 프로그램 차단 여부를 확인하세요.");
-    return launched && code==0;
+    return launched && code==20 ? 2 : launched && code==0 ? 1 : 0;
 }
 static void remove_profile(WCHAR *path) {
     SHFILEOPSTRUCTW op={0};
@@ -183,7 +188,11 @@ static DWORD wait_window(HANDLE backend, PROCESS_INFORMATION *edge) {
     }
     if(app_icon_big) SendMessageW(search.window,WM_SETICON,ICON_BIG,(LPARAM)app_icon_big);
     if(app_icon_small) SendMessageW(search.window,WM_SETICON,ICON_SMALL,(LPARAM)app_icon_small);
-    while(IsWindow(search.window)) if(WaitForSingleObject(backend,300)==WAIT_OBJECT_0) return 1;
+    while(IsWindow(search.window)) {
+        if(GetFileAttributesW(update_signal)!=INVALID_FILE_ATTRIBUTES)
+            PostMessageW(search.window,WM_CLOSE,0,0);
+        if(WaitForSingleObject(backend,300)==WAIT_OBJECT_0) return 1;
+    }
     return 0;
 }
 int WINAPI wWinMain(HINSTANCE instance,HINSTANCE prev,LPWSTR args,int show) {
@@ -194,11 +203,15 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE prev,LPWSTR args,int show) {
     SECURITY_ATTRIBUTES sa={sizeof(sa),NULL,TRUE};
     BOOL made_profile=FALSE;
     int result=1;
+    DWORD path_length=GetModuleFileNameW(NULL,launcher_path,MAX_PATH);
+    if(!path_length || path_length>=MAX_PATH) { alert(L"실행 파일 경로를 확인하지 못했습니다."); return 1; }
     app_icon_big=(HICON)LoadImageW(instance,MAKEINTRESOURCEW(101),IMAGE_ICON,32,32,0);
     app_icon_small=(HICON)LoadImageW(instance,MAKEINTRESOURCEW(101),IMAGE_ICON,16,16,0);
     made_profile=temp_profile(profile);
     if(!made_profile) { alert(L"시작 준비에 사용할 임시 폴더를 만들지 못했습니다."); goto cleanup; }
-    if(!ensure_prerequisites(profile)) goto cleanup;
+    if(!append(update_signal,MAX_PATH,profile) || !append(update_signal,MAX_PATH,L"\\update.signal")) goto cleanup;
+    int prepared=ensure_prerequisites(profile);
+    if(prepared!=1) { result=prepared==2?0:1; goto cleanup; }
     if (!find_edge(edge)) { alert(L"Microsoft Edge 설치를 확인하지 못했습니다. Branchdesk를 다시 실행하세요."); goto cleanup; }
     if(!listen_local() || !SetHandleInformation((HANDLE)listener,HANDLE_FLAG_INHERIT,0)) {
         alert(L"BD-01: Windows에서 127.0.0.1 수신 포트를 열 수 없습니다.");

@@ -30,7 +30,16 @@ def main():
     port = int(source.readline(8))
     if not 0 < port <= 65535:
         raise ValueError("Invalid desktop port")
-    with Desk(port, desktop=True) as server:
+    pid = int(source.readline(16))
+    lengths = [int(source.readline(8)), int(source.readline(8))]
+    if pid < 0 or any(not 0 <= size < 32768 for size in lengths):
+        raise ValueError("Invalid launcher metadata")
+    paths = []
+    for size in lengths:
+        raw = source.read(size * 2)
+        if len(raw) != size * 2: raise ValueError("Incomplete launcher metadata")
+        paths.append(raw.decode('utf-16le'))
+    with Desk(port, desktop=True, launcher=dict(pid=pid, path=paths[0], signal=paths[1])) as server:
         dest.write(f"BRANCHDESK/2 {port} {server.token}\n".encode("ascii"))
         dest.flush()
         while True:

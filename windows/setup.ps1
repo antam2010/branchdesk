@@ -1,4 +1,4 @@
-param([switch]$Install)
+param([switch]$Install, [string]$Launcher = '')
 $ErrorActionPreference = 'Stop'
 
 # This check runs as the desktop user. Only WSL's official installer requests UAC.
@@ -22,6 +22,22 @@ esac
 if command -v apt-get >/dev/null 2>&1; then apt_ok=1; fi
 printf 'BD_ENV/1\nPYTHON=%s\nGIT=%s\nAPT=%s\n' "$python_ok" "$git_ok" "$apt_ok"
 '@
+
+function Start-CachedUpdate([string]$Current) {
+    try {
+        $root = Join-Path $env:LOCALAPPDATA 'Branchdesk'
+        $pointer = Join-Path $root 'current.json'
+        if (!(Test-Path -LiteralPath $pointer)) { return $false }
+        $data = Get-Content -LiteralPath $pointer -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($data.sha256 -notmatch '^[0-9a-f]{64}$') { return $false }
+        $hash = (Get-FileHash -LiteralPath $Current -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($hash -eq $data.sha256 -or @($data.launchers) -notcontains $hash) { return $false }
+        $candidate = Join-Path (Join-Path (Join-Path $root 'versions') $data.sha256) 'Branchdesk.exe'
+        if (!(Test-Path -LiteralPath $candidate) -or (Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash.ToLowerInvariant() -ne $data.sha256) { return $false }
+        Start-Process -FilePath $candidate
+        return $true
+    } catch { return $false }
+}
 
 function Get-Edge {
     foreach ($base in @(${env:ProgramFiles(x86)}, $env:ProgramFiles, $env:LOCALAPPDATA)) {
@@ -132,6 +148,7 @@ function Install-Environment {
 }
 
 try {
+    if (!$Install -and $Launcher -and (Start-CachedUpdate $Launcher)) { exit 20 }
     if ($Install) {
         $result = Install-Environment
         exit $result

@@ -17,17 +17,18 @@ import gitdesk
 import partial
 import workspace_ops
 import commit_ops
+import updater
 from tab_store import TabStore
 
 WEB = Path(__file__).resolve().parent / "web"
 ASSETS = {"/panes.js": "panes.js", "/": "index.html", "/app.js": "app.js", "/commands.js": "commands.js", "/style.css": "style.css",
-          "/icon.png": "icon.png", "/favicon.ico": "favicon.ico", "/context.js": "context.js"}
+          "/icon.png": "icon.png", "/favicon.ico": "favicon.ico", "/context.js": "context.js", "/update.js": "update.js"}
 
 
 class Desk(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, port, desktop=False):
+    def __init__(self, port, desktop=False, launcher=None):
         super().__init__(("127.0.0.1", port), Handler, bind_and_activate=not desktop)
         if desktop:
             self.server_port = port  # Windows owns the listening socket.
@@ -37,6 +38,7 @@ class Desk(ThreadingHTTPServer):
         self.tabs = TabStore()
         self.tab_warning = None
         self.active = None
+        self.updater = updater.Updater(launcher)
         try:
             paths, active, self.recent = self.tabs.read()
         except OSError:
@@ -129,7 +131,31 @@ class Handler(BaseHTTPRequestHandler):
             d = json.loads(self.rfile.read(size))
             if not isinstance(d, dict):
                 raise ValueError("잘못된 요청입니다.")
-            if self.path == "/api/directories":
+            if self.path == "/api/app-update":
+                action = d.get('action', 'status')
+                app = self.server.updater
+                if action == 'check': value = app.check()
+                elif action == 'download': value = app.download(d.get('ticket'))
+                elif action == 'apply':
+                    ui = d.get('ui', {})
+                    if not isinstance(ui, dict): raise ValueError('화면 상태를 확인하세요.')
+                    raw_drafts = ui.get('drafts', [])
+                    if not isinstance(raw_drafts, list): raise ValueError('입력 상태를 확인하세요.')
+                    drafts = []
+                    for row in raw_drafts:
+                        if not isinstance(row, list) or len(row) != 2: raise ValueError('입력 상태를 확인하세요.')
+                        path, message = row
+                        if not isinstance(path, str) or not path.startswith('/') or len(path) > 4096 or not isinstance(message, str) or len(message) > 100000:
+                            raise ValueError('작성 중인 메시지를 확인한 뒤 다시 적용하세요.')
+                        drafts.append([path, message])
+                    resume = dict(drafts=drafts, repo=ui.get('repo') if ui.get('repo') in self.server.repos else self.server.active,
+                                  mode='work' if ui.get('mode') == 'work' else 'history')
+                    value = app.apply(d.get('ticket'), resume)
+                elif action == 'restart': value = app.restart(d.get('ticket'))
+                elif action == 'restore': value = updater.restore_ui_state()
+                elif action == 'status': value = app.status()
+                else: raise ValueError('업데이트 작업을 확인하세요.')
+            elif self.path == "/api/directories":
                 value = workspace_ops.directory_suggestions(d["path"])
             elif self.path == "/api/open":
                 value = self.server.register(d["path"], exact=d.get("exact") is True)

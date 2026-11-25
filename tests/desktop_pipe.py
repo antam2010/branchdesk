@@ -54,7 +54,7 @@ class TestBridge(socketserver.StreamRequestHandler):
 
 
 @contextmanager
-def desktop(executable, workdir):
+def desktop(executable, workdir, launcher=None):
     command, blob = bundled_command(executable)
     with socketserver.ThreadingTCPServer(("127.0.0.1", 0), TestBridge) as server:
         server.daemon_threads = True
@@ -64,7 +64,10 @@ def desktop(executable, workdir):
             server.child = child
             server.pipe_lock = threading.Lock()
             try:
-                child.stdin.write(blob + f"{port}\n".encode("ascii"))
+                info = launcher or dict(pid=0, path='', signal='')
+                path = info['path'].encode('utf-16le'); signal = info['signal'].encode('utf-16le')
+                metadata = f"{port}\n{info['pid']}\n{len(path)//2}\n{len(signal)//2}\n".encode('ascii')
+                child.stdin.write(blob + metadata + path + signal)
                 child.stdin.flush()
                 marker, echoed_port, key = child.stdout.readline().decode().split()
                 assert marker == "BRANCHDESK/2" and int(echoed_port) == port

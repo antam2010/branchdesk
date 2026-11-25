@@ -13,6 +13,19 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DesktopTests(unittest.TestCase):
+    def test_launcher_metadata_handles_spaces_and_utf16_surrogates(self):
+        info = dict(pid=42, path='C:\\Users\\이 대호😀\\Branchdesk.exe', signal='C:\\Temp\\시작\\update.signal')
+        with tempfile.TemporaryDirectory() as temp, desktop(ROOT / 'Branchdesk.exe', temp, info) as url:
+            address = urlsplit(url)
+            connection = http.client.HTTPConnection(address.hostname, address.port, timeout=10)
+            try:
+                connection.request('POST', '/api/app-update', json.dumps(dict(action='status')), {'X-Desk-Key': address.fragment})
+                response = connection.getresponse()
+                self.assertEqual(response.status, 200)
+                self.assertTrue(json.loads(response.read())['value']['supported'])
+            finally:
+                connection.close()
+
     def test_packaged_pipe_while_listening_port_already_owned(self):
         exe = Path(os.environ.get("BRANCHDESK_EXE", ROOT / "dist/Branchdesk.exe")).resolve()
         if not exe.exists():
