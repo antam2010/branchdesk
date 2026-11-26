@@ -2,166 +2,129 @@
 
 **English** · [한국어](README.ko.md) · [日本語](README.ja.md)
 
-A local Git GUI for Windows and WSL. Manage Windows repositories with Windows Git and WSL repositories with the selected distribution's Git in the same application. The interface supports English, Korean, and Japanese. Choose a language from the selector at the top right; your selection is restored after restarting or updating the app. Repository names, paths, branches, commit messages, and Git output remain unchanged.
+**Manage Windows and WSL2 Git projects in one app.** Review changed files, commit your work, switch branches, and pull or push through a graphical interface. Choose English, Korean, or Japanese.
 
-## Start on Windows
+New to the app? Follow [Launch](#1-launch-the-app) → [Open a project](#2-open-the-project-you-want-to-work-on) → [Commit and push](#3-edit-files-then-commit-and-push). Advanced options and source builds are in the [detailed reference](docs/reference.md).
 
-Double-click `Branchdesk.exe` on Windows 11 x64. The executable contains the application, web assets, icon, and setup helpers. It requires Microsoft Edge, Python 3.9+, and Git 2.28+ in the environment doing the Git work. No frontend build or third-party Python package is needed to run the app.
+## 1. Launch the app
 
-| Your setup | How to start |
+1. [Download Branchdesk.exe](https://github.com/antam2010/branchdesk/raw/refs/heads/main/Branchdesk.exe) and save it in a folder of your choice. If you have already cloned this repository, use its `Branchdesk.exe`.
+2. Double-click `Branchdesk.exe` on Windows 11 x64.
+3. If setup appears, connect Git and Python. You can use Windows alone, or an existing WSL environment.
+4. Choose **English** from the language selector at the top right. The app remembers your choice.
+
+You need Git 2.28 or later and Python 3.9 or later. Connect existing executables, or use **Install in app tools folder** in setup if they are missing. Microsoft Edge on Windows displays the app window. Using the EXE requires no source build or Python package installation.
+
+## 2. Open the project you want to work on
+
+The folder you open here is **your development project's Git repository**. It is separate from the folder where you keep Branchdesk itself.
+
+### If the project is already on your PC
+
+1. Choose **Open repository → Open existing repository**.
+2. Select the environment to use for this repository, then enter the project folder's path.
+3. Confirm to open its tab and commit history.
+
+An environment tells the app **where to run Git for this project**.
+
+| Where the project lives | Environment to select | Example path |
+| --- | --- | --- |
+| A Windows folder | Windows | `C:\projects\my-app` |
+| A Linux folder in WSL, such as Ubuntu | The matching WSL2 distribution | `/home/user/projects/my-app` or `~/projects/my-app` |
+
+If the environment is missing, use **＋ Add environment**, choose Windows or WSL2, and click **Connect this environment**. The app detects Git and Python. Expand **Set executable paths (optional)** only if detection fails or you need a specific installation.
+
+Windows and WSL projects can stay open in separate tabs in the same app. For a WSL project, choose its WSL environment and use a `/home/...` path so its own Git handles the files.
+
+### If the project is only on GitHub or GitLab
+
+1. Copy the project's Git clone URL from the service, for example `https://github.com/your-account/my-app.git`.
+2. Choose **Open repository → Clone remote repository**.
+3. Enter the URL, select an environment, and enter a **new local folder path** to create. Then run the operation.
+
+Cloning downloads a project to your PC for the first time. Use **Open existing repository** for a project you have already downloaded. To start a completely new project, choose **Create empty repository**.
+
+## 3. Edit files, then commit and push
+
+For example, after editing a login screen on your `feature/login` branch:
+
+1. Save your changes in an editor such as VS Code or IntelliJ.
+2. In Branchdesk, click **Refresh**, then open **File status** on the left.
+3. Click a changed file to review its changes. New text files show their full contents.
+4. Click **＋** beside each file to include it in this commit. This is called staging. Use **−** to unstage a file you selected by mistake.
+5. Write a message such as `Add validation to the login form`, then click **Commit**.
+6. To share the work, choose **Push**, check the remote (usually `origin`) and destination branch, and confirm.
+
+**Commit saves a record on your PC. Push sends those commits to GitHub, GitLab, or another remote.** Staging selects what goes into this commit; other changes remain available for a later commit.
+
+To request a code review, open the repository webpage with **Remote** and create a PR/MR in your Git service.
+
+If Commit is disabled, check that you have staged changes and entered a message. For a missing author name/email, see [Troubleshooting](#troubleshooting).
+
+## 4. Get your team's latest changes
+
+Before starting work, check your current branch and use **Pull** to bring it up to date. Commit unfinished changes or temporarily save them with **Stash** first.
+
+| Button | What it does | When to use it |
+| --- | --- | --- |
+| Fetch | Gets the latest remote commit/branch information without changing your working files | Inspect your team's changes first |
+| Pull | Integrates remote changes into your current local branch | Bring your project up to date |
+| Push | Sends local commits to the selected remote branch | Share completed work |
+| Remote | Opens the connected repository's webpage | View PRs/MRs on GitHub or GitLab |
+| Remote settings | Shows, adds, or edits remote URLs | Manage connections such as `origin` |
+
+Pull defaults to **Fast-forward only**, which proceeds when the histories have not diverged. A refused pull does not erase your work. If merging or rebasing is needed, follow your team's branch workflow.
+
+## 5. Inspect, switch, or create a branch
+
+In the left branch list, **single-click to reveal the branch's commit in the graph; double-click to open the switch confirmation**. A single click does not change your working branch.
+
+Check the destination name before confirming a switch. **Clean checkout (discard modified, staged, and new files)** is off by default. Turning it on discards the listed uncommitted changes, so leave it off when you want to keep your work.
+
+For new work, choose **Branch → Create branch**, enter a name such as `feature/login`, and select its starting point. **Check out after creation** switches to the new branch immediately. For a branch that exists only on the remote, use **Track remote branch** to create a local working branch.
+
+See the [feature reference](docs/reference.md#everyday-work) for merging, resolving conflicts, reverting commits, tags, and Git Flow.
+
+## 6. Use Home and saved projects
+
+- Click **Home** at the top left to see recent project names and paths. Click an entry to reopen it or return to its existing tab.
+- Home keeps your open tabs and commit-message drafts available.
+- A tab's **×** closes just that tab. You can reopen it from the recent list.
+- **Remove from list** removes the tab and saved entry without deleting the actual project folder. It also works for paths that have been moved or deleted.
+
+In **History**, click a commit to inspect it. Double-click a file to enlarge its preview. Right-click a commit, file, branch, or tab for actions on that item. Use **Terminal** or **Explorer** to open the current project folder.
+
+## 7. Update the app
+
+Choose **App update → Download new version → Apply and restart** at the top right. You can keep working during the download; applying the update restarts the app. Open repositories and commit-message drafts are restored.
+
+**Updating the app and pulling a project are separate actions.** App update refreshes the runnable Branchdesk app. It does not run `git pull` in your development project. Branchdesk's source and README files also need a separate `git pull` to refresh your checkout.
+
+## Troubleshooting
+
+| Situation | What to check |
 | --- | --- |
-| An existing, working WSL distribution | Continue with the default WSL environment |
-| Windows without WSL | Select Windows Python and Git executables in the startup helper |
-| Windows Python or Git is missing | Use **Install in app tools folder** |
-| You prefer WSL | Select **Use WSL** and follow the Ubuntu/Debian setup helper |
+| Git or Python cannot be found | Check the selected environment in **Environments**. Set executable paths if detection fails, or use **Install required programs**. |
+| Clone, fetch, pull, or push authentication fails | Authentication belongs to the project's selected Windows/WSL environment. For SSH, see below; for HTTPS, check your Git service's authentication setup. |
+| A commit asks for your name/email | Set your Git identity in that project's **Terminal**, as shown below. |
+| Pull is refused or reports conflicts | Commit or stash local changes first. If both sides have separate commits, merge or rebase according to your team's workflow. See the reference for conflict resolution. |
+| Pull, Push, or Remote is disabled | Check the connection in **Remote settings**. For an empty repository, make its first commit before sharing work. |
+| A deleted project folder cannot be opened | Use **Remove from list** in the error dialog or recent list. |
+| Terminal or Explorer does not appear in front | Check the app's result message and the Windows taskbar for the opened window. |
+| App update reports a `Replace` / invalid-path error | An older update helper has a bug. Close the app, run `git pull` **in the Branchdesk repository folder**, then launch that folder's new `Branchdesk.exe` once. |
+| `git pull` stops because README or other local files have changed | Commit your edits or stash them before pulling. You do not need to delete your edits or force-reset the repository. |
 
-The default Windows tools directory is `%LOCALAPPDATA%\Branchdesk\tools`: Python at `python\python.exe`, Git at `git\cmd\git.exe`. Windows installations use WinGet and its package-manifest hash verification. WinGet comes with Microsoft's **App Installer**. If a package is already installed elsewhere, connect its existing executable instead of expecting WinGet to duplicate it in a new directory.
-
-Automatic WSL package installation supports Ubuntu/Debian. Initial WSL installation may require administrator approval, a restart, and creation of a Linux account. The helper does not replace an existing distribution or change the default one. Edge must be installed on Windows.
-
-### Connect Windows and WSL2 environments
-
-1. Open **Environments**.
-2. Click **＋ Add environment**.
-3. Choose **Windows** or **WSL2**. Enter a name and, optionally, a WSL distribution name.
-4. Click **Connect this environment**. The app discovers Python/Git and checks their versions.
-5. Use **Set executable paths (optional)** if discovery fails or you need a specific installation.
-
-The list shows the actual platform and distribution rather than an ambiguous “current OS.” Native Linux source launches also offer a Linux environment. Existing profile IDs and repository connections are preserved.
-
-In **Open repository**, choose an environment and enter its native path:
-
-| Environment | Example path |
-| --- | --- |
-| Windows | `C:\projects\my-app` or `C:/projects/my-app` |
-| WSL2 | `~/projects/my-app` or `/home/user/projects/my-app` |
-
-The add-environment button in the repository dialog lets you add a missing environment and return without losing the clone URL or folder you typed. Each repository tab remembers its environment. Git/Python paths are app settings; selecting them does not change global Git settings or the system PATH. Installers may register their own PATH entries when you explicitly install tools.
-
-Expand **Need Git or Python? Install programs** to install missing tools. Windows accepts a user directory; WSL uses the selected distribution's package manager. After installation, connect or save the environment.
-
-**App startup settings (advanced)** changes the Python environment that starts the EXE on its next launch. This is separate from each repository's Git environment and normally needs no change. Switching the host OS merges profile and tab references into the destination state directory; repository and private-key files are not copied. App startup uses Windows or the default WSL distribution; other distributions remain available for repository work.
-
-Git identity, credentials, line endings, and SSH agents are separate between Windows and WSL. Prefer one Git environment per worktree and use `.gitattributes` to define shared line-ending rules.
-
-### SSH keys
-
-Expand **SSH keys** in a saved environment. Select an existing private-key path, or use **Find existing keys** to find keys in that environment's `.ssh` directory. **View/copy public key** displays or copies only the public key for registration in your Git service account. Save with **Save SSH settings**. The app does not return private-key contents, edit `~/.ssh/config`, or change global Git configuration. Leaving the key blank keeps existing Git/SSH authentication.
-
-New Ed25519 keys are created in `~/.ssh/branchdesk-NAME/id_ed25519`. Existing directories are never overwritten. App-generated keys require explicitly selecting the unencrypted-key checkbox. To use a passphrase, generate the key in that environment's terminal with `ssh-keygen -t ed25519`, connect it, and unlock it with `ssh-add`. For WSL/Linux, specify an agent socket if `SSH_AUTH_SOCK` is not inherited by the app. Windows OpenSSH uses the Windows agent service.
-
-Authentication checks support GitHub, GitLab.com, and Bitbucket. Unknown host keys are not automatically accepted. Run the appropriate `ssh -T git@HOST` command in the selected environment, verify the service's published host fingerprint, and register your public key yourself. Use a terminal for private servers or custom connection details.
-
-## Home and recent repositories
-
-Click **Home** at the left of the tab bar to see saved repository paths, even while other repositories are open. Click a recent entry to open or reactivate it. Existing tabs and commit-message drafts remain available. Repository actions are disabled on Home until you open a repository. Home also provides the open-repository button and list-removal actions.
-
-## Remove a repository from the list
-
-Use **Remove from list** beside a recent repository or in the repository tab menu. This removes its open tab and recent-path records; it does not delete the folder or Git files. A failed-open dialog also offers removal when a folder has been deleted or moved, or its environment cannot be reached. Removing a saved entry does not require connecting to that environment.
-
-## Everyday work
-
-| Action | Behavior |
-| --- | --- |
-| Repository tabs | Open, clone, or initialize repositories; restore tab order and the active tab on restart; reopen recent repositories |
-| Single-click a branch | Select its commit and scroll the graph there, without checking it out; load more history if needed, within the 5,000-commit limit |
-| Double-click a local branch | Open **Confirm branch change** before checkout |
-| Clean checkout | Off by default. Explicitly selecting **Clean checkout (discard modified, staged, and new files)** discards the listed modifications, staged changes, and new files. Ignored files and nested Git repositories remain. A changed confirmation snapshot is rejected |
-| File status and commits | Stage or unstage whole files or selected text changes; commit or amend the latest commit |
-| New files | Show the complete selected text version with line numbers, even without an old file to compare. Index previews read staged content; commit previews read that commit. Empty files, binary content, and limits get explicit messages |
-| History and comparison | Inspect commits, compare two selected commits, and view files as a list or folder tree. Double-click a file to expand its preview |
-| Remote webpage | **Remote** opens the repository webpage in the default browser. SSH/HTTPS Git URLs are converted to web URLs with credentials removed. Select a remote when several web destinations exist. Local-path remotes have no webpage |
-| Remote settings | **Remote settings** views/copies fetch and push URLs, adds or edits remotes, and removes connections |
-| Fetch, pull, push | Choose a remote/branch; optional prune/tags for fetch; fast-forward-only pull by default, with merge/rebase alternatives; push sets upstream |
-| Branches and tags | Create/rename/delete merged local branches, track a remote branch, rebase, create/delete tags, and push a selected tag |
-| Stashes and conflicts | Save changes, apply/pop/drop stashes, resolve conflicts by editing or choosing a side, and continue/abort operations |
-| Terminal and Explorer | Open the selected repository's Windows/WSL terminal or folder; use a new Windows Terminal window when available, with PowerShell fallback; reuse an Explorer window for the same folder |
-| Window activation feedback | Restore and activate the opened window. If Windows denies activation, flash the located window's taskbar button and show an app message to help you find it |
-| External changes | Use **Refresh** after working in another editor or terminal |
-
-A regular branch switch lets Git carry compatible local changes and refuses conflicting ones. Clean checkout is destructive: review its file list before confirming.
-
-File previews support UTF-8 and BOM-marked UTF-16, up to 192 KiB and 3,000 displayed lines, with a truncation message. Line staging supports UTF-8 regular text files up to 256 KiB and 5,000 lines per version. History starts with 150 commits and loads up to 5,000. Search covers loaded commits. Renames appear as delete/add entries.
-
-### Menus, layout, and Git Flow
-
-The app replaces browser right-click menus with desktop-style menus for commits, branches, tags, files, tabs, and editable text. Submenus support hover and arrow keys; Shift+F10 opens a menu, Enter activates, and Esc closes it. Text fields support copy/cut/paste/select-all/undo; use Ctrl+V if browser clipboard permission is unavailable. F5 refreshes the repository instead of reloading the page.
-
-Drag pane separators or focus them and use arrow keys to resize. Window position, size, and maximized state are stored outside the temporary Edge profile and restored on restart and app updates. Closing while minimized restores the previous normal/maximized state on the next launch. Windows adjusts off-screen placement after monitor changes.
-
-Commit menus include detached checkout, merge/rebase onto a selected commit, branch/tag creation, revert/cherry-pick with mainline selection, reset, archive/patch export, SHA copy, and external diff. Hard reset requires typing `HARD`. Reordering supports pick/squash/fixup/drop for a clean, linear local history with up to 100 commits after the selected base. Archives/patches are limited to 12 MiB; merge commits cannot be exported as a single format-patch. External comparison uses that environment's configured `diff.tool` (Ctrl+D).
-
-For Git Flow, configure production/development branches in **Git Flow**, then start `feature`, `release`, or `hotfix` work. Features start from and finish into development. Releases/hotfixes finish into both branches and create a version tag. Finishing prepares merges in a temporary worktree and publishes refs in one Git transaction; conflicts stop before destination refs are updated. Push branches/tags separately.
-
-## App updates
-
-Use **App update → Download new version → Apply and restart**. If your old EXE predates the updater, close it, `git pull` once, and run the new EXE first.
-
-If an older update helper reports a three-argument `Replace` error about an invalid path, close the app, run `git pull`, and launch the new `Branchdesk.exe` from the checkout once. The affected helper cannot install its own fix through the same update action. Repository files are unaffected.
-
-The updater compares the current EXE with `Branchdesk.exe` on this repository's `main`, downloads a commit-pinned blob in the background, verifies its Git blob hash and Windows executable format, then checks SHA-256 when caching it in Windows. Applying saves tabs and commit-message drafts, closes the current app, and launches the new EXE. Resume data is shared across Windows/WSL host changes.
-
-New versions live under `%LOCALAPPDATA%\Branchdesk\versions\<hash>\Branchdesk.exe`. A pointer redirects a recognized older launcher to the cached version on later launches. A newly pulled, unrecognized EXE takes priority. Download/helper verification failures leave the current app available.
-
-**App update does not run `git pull`.** It updates the runnable app, leaving your checkout, README, local edits, and original EXE in place. Run `git pull` separately to update source files. Tool installations are managed separately. Automatic application requires the Windows EXE; source-mode launches do not apply executable updates.
-
-## Run from source and build
+To set your identity **only for the current project**, run these commands in its terminal, replacing the example name and email:
 
 ```bash
-python3 branchdesk.py
-python3 branchdesk.py ~/projects/project-a ~/projects/project-b
-python3 branchdesk.py --no-browser
+git config user.name "Your Name"
+git config user.email "you@example.com"
 ```
 
-On Windows, use `python` instead of `python3` as appropriate. Open the complete local URL printed in the terminal if the browser does not open automatically. Ctrl+C stops the source server. The Python runtime uses only the standard library plus your Git executable.
+### Connect an SSH key
 
-To make a WSL/Linux command available from other folders, adapt this alias in `~/.bashrc`:
+If SSH already works in the selected environment, you can keep using its existing setup. To connect another key, open **Environments → SSH keys (optional)**, select an existing key, and click **Save SSH settings**. You can also generate a new key if needed. Register **only the public key** in your GitHub/GitLab account; keep the private key to yourself. See [SSH details](docs/reference.md#ssh-keys) for passphrases and private Git servers.
 
-```bash
-alias branchdesk='python3 "$HOME/tools/branchdesk/branchdesk.py"'
-```
+## Learn more
 
-Build in a Visual Studio **x64 Native Tools Command Prompt** with C++ desktop build tools and Windows Python installed:
-
-```bat
-py -3 windows/build.py
-```
-
-Output: `dist/Branchdesk.exe`. On Linux with MinGW-w64 GCC and windres installed, run `python3 windows/build.py`. Commit the rebuilt root `Branchdesk.exe` when distributing a source change through app updates.
-
-## Local state and transport
-
-| Data | Location |
-| --- | --- |
-| Windows profiles/tabs | `%LOCALAPPDATA%\Branchdesk\state` |
-| WSL/Linux profiles/tabs | `~/.local/state/branchdesk`, or the `XDG_STATE_HOME` equivalent |
-| Desktop language selection | `%LOCALAPPDATA%\Branchdesk\language.txt` (source mode: the user state folder) |
-| Window position/size/maximized state | `%LOCALAPPDATA%\Branchdesk\window.bin` |
-| EXE versions and update pointer | `%LOCALAPPDATA%\Branchdesk\versions` and `current.json` |
-| Desktop update resume data | `%LOCALAPPDATA%\Branchdesk\resume-ui.json` |
-
-The EXE listens only on Windows loopback. Authenticated HTTP requests travel over private binary pipes to the selected Python environment; WSL localhost forwarding is not required. Each window has an isolated temporary Edge profile. Closing the app allows accepted Git work to finish before backend shutdown.
-
-## Validation
-
-```bash
-python3 -m unittest discover -s tests -v
-# Optional: requires Playwright for Python and Chromium, only for testing
-python3 tests/browser_smoke.py
-BRANCHDESK_EXE=./Branchdesk.exe python3 tests/browser_smoke.py
-```
-
-Tests use temporary repositories and local bare remotes. They cover Git workflows, profile/worker transport, SSH key safety, selected-version file previews, branch cleanup safeguards and graph lookup, remote URL conversion, and updater error paths. Browser tests also check all three interface languages, persistence, untranslated user data, draft preservation, and Home navigation. They exercise menus, file previews, branch click/double-click behavior, remote choice, open-window messages, and updates; actual Windows process launching is mocked on Linux.
-
-In a prepared Windows 11 desktop session:
-
-The update-helper regression test uses real PowerShell and temporary files to check first/repeated updates and rollback. It intercepts process launches and dialogs, so it does not start, close, or update your installed app. Python tests run it when PowerShell is available (or set `BRANCHDESK_POWERSHELL` to its executable).
-
-```powershell
-.\windows\test-update.ps1
-.\windows\test-launch.ps1
-.\windows\test-window-state.ps1
-```
-
-Close other Branchdesk windows before the placement test. It checks normal position/size, maximized restart, and closing while minimized, then restores the previous placement file. Actual Windows installation, foreground activation, multi-monitor placement, and update restart need Windows testing; they are not executed by the Linux tests.
+The [detailed reference](docs/reference.md) covers executable paths, SSH, feature options, running from source, building the EXE, and testing. You can use the app without going through the build or test steps.
